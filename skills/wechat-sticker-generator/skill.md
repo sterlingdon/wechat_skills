@@ -16,7 +16,7 @@ description: 一键生成符合微信规范的动态(GIF)及静态(PNG)系列表
 - 👤 **灵活角色系统** — 支持原创角色、知名IP、真人Q版化
 - 📸 **真人照片转Q版** — 上传照片→自动转换→生成表情包（保留真人特征）
 - 🔒 **角色一致性锁定** — 通过参考图保证多套件角色长相统一
-- ⚡ **全自动流水线** — 一键生成九宫格→切片→GIF 合成；**`origin/`** 为原图仅裁剪缩放，去背景成功时额外多 **`nobg/`**（透明）
+- ⚡ **全自动流水线** — 一键生成九宫格→切片→GIF 合成；**`origin/`** 为原图仅裁剪缩放，去背景成功时额外多 **`nobg/`**（透明）；**≥2 组 `anim_*` 时**根目录生成 **`export_gifs/origin/`** 与 **`export_gifs/nobg/`**（若有透明）汇总全部动图，便于打包导出
 
 ---
 
@@ -126,6 +126,7 @@ pip install onnxruntime
 - 去背景失败时保留该帧原图，可检查依赖或调整 `bg_removal_model`
 - 去背景开启且成功时，会在同目录下保存 **`original_grid_nobg.png`**：整张九宫格去背景之后、切成 9 张贴纸之前的 PNG，便于对照 `original_grid.png` 检查抠图效果
 - **目录统一**：**`origin/`** 内为**原图输出**（仅裁剪+240 缩放，无压白底、无 rembg）；去背景成功时**额外**多 **`nobg/`**；未开去背景或失败时只有 `origin/`（会删除遗留的 `nobg/` 与旧版 `white/` 目录）
+- **汇总导出**：同一 workspace 下若有 **≥2 个 `anim_*`**，在根目录生成 **`export_gifs/origin/`**（各 `anim_XX.gif`）与 **`export_gifs/nobg/`**（存在透明动图时）；**仅 1 个 `anim_*` 时不生成** `export_gifs/`（并会删除旧的汇总目录）
 
 #### 本地脚本模式（`bg_removal_method: "script"`）
 
@@ -281,19 +282,19 @@ python your_remove_bg.py /tmp/in.png /tmp/out.png
 ### 执行命令序列
 
 ```bash
-# Step 1: 创建工作空间
-DIR_PATH=$(python sticker_utils.py create_dir)
-# 输出: /path/to/output/20260321_120000
+# Step 1: 创建工作空间（可选 --provider 指定提供商，目录名会自动带上后缀）
+DIR_PATH=$(python sticker_utils.py create_dir --provider gemini)
+# 输出: /path/to/output/20260321_120000_gemini
 
 # Step 2: 写入 params.json 到 $DIR_PATH/params.json
 
 # Step 3: 解析生成提示词
 python sticker_utils.py build_prompts $DIR_PATH
 
-# Step 4: 生成图像（3个动画目录）
-python sticker_utils.py draw $DIR_PATH/anim_01/prompt.txt $DIR_PATH/anim_01/original_grid.png
-python sticker_utils.py draw $DIR_PATH/anim_02/prompt.txt $DIR_PATH/anim_02/original_grid.png
-python sticker_utils.py draw $DIR_PATH/anim_03/prompt.txt $DIR_PATH/anim_03/original_grid.png
+# Step 4: 生成图像（3个动画目录，--provider 可选）
+python sticker_utils.py draw $DIR_PATH/anim_01/prompt.txt $DIR_PATH/anim_01/original_grid.png --provider gemini
+python sticker_utils.py draw $DIR_PATH/anim_02/prompt.txt $DIR_PATH/anim_02/original_grid.png --provider gemini
+python sticker_utils.py draw $DIR_PATH/anim_03/prompt.txt $DIR_PATH/anim_03/original_grid.png --provider gemini
 
 # Step 5: 切片合成
 python sticker_utils.py process $DIR_PATH
@@ -302,7 +303,7 @@ python sticker_utils.py process $DIR_PATH
 ### 预期产出
 
 ```
-output/20260321_120000/
+output/20260321_120000_gemini/
 ├── params.json
 ├── anim_01/
 │   ├── original_grid.png
@@ -312,8 +313,16 @@ output/20260321_120000/
 │   └── nobg/                    ← 仅去背景成功时：透明套，同上文件名
 ├── anim_02/
 │   └── …
-└── anim_03/
-    └── …
+├── anim_03/
+│   └── …
+├── export_gifs/                 ← 仅当 anim_* ≥2 时：汇总动图便于导出
+│   ├── origin/
+│   │   ├── anim_01.gif
+│   │   └── anim_02.gif …
+│   └── nobg/                    ← 仅当存在去背景动图时
+│       ├── anim_01.gif
+│       └── …
+└── …
 ```
 
 ---
@@ -338,7 +347,7 @@ output/20260321_120000/
 
 ```bash
 # ========== 第一步：创建工作空间 ==========
-DIR_PATH=$(python sticker_utils.py create_dir)
+DIR_PATH=$(python sticker_utils.py create_dir --provider gemini)
 
 # ========== 第二步：照片转Q版定妆图 ==========
 # 用户提供的照片路径
@@ -454,10 +463,11 @@ Gemini 会自动进行以下处理：
 
 ```bash
 # 1. 创建工作空间
-DIR_PATH=$(python sticker_utils.py create_dir)
+DIR_PATH=$(python sticker_utils.py create_dir --provider gemini)
 
 # 2. 生成一张单独的角色定妆图（不带动作，纯外观展示）
-python sticker_utils.py draw_character "$DIR_PATH" "角色的character_prompt内容" "$DIR_PATH/base_reference.png"
+# 参数顺序：character_prompt, style_preset, output_path
+python sticker_utils.py draw_character "角色的character_prompt内容" "2D_KAWAII" "$DIR_PATH/base_reference.png"
 
 # 3. 将生成的 base_reference.png 作为 reference_image 写入 params.json
 ```
@@ -487,7 +497,7 @@ python sticker_utils.py transform_photo "$USER_PHOTO" "2D_KAWAII" "$DIR_PATH/bas
 ### 【第一步】沙盒建站
 
 ```bash
-DIR_PATH=$(python sticker_utils.py create_dir)
+DIR_PATH=$(python sticker_utils.py create_dir --provider gemini)
 ```
 
 ### 【第二步】写入配置（含 reference_image）
@@ -550,3 +560,4 @@ python sticker_utils.py process $DIR_PATH
   - 去背景成功时另有 **`anim_XX/nobg/sticker_01.png`~`09.png`**（透明）
 - 原始九宫格 `original_grid.png`
 - 若开启去背景：同目录 `original_grid_nobg.png`（整图去背景后、切片前）
+- **多组动图时**：根目录 **`export_gifs/origin/*.gif`**（原图动图）、**`export_gifs/nobg/*.gif`**（透明动图，有则生成）；单组动图无此目录

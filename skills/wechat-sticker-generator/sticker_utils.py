@@ -245,11 +245,14 @@ def build_static_prompt(character, style_desc, expressions, reference_image="", 
     background_desc = BACKGROUND_TYPE_MAPPING.get(background_type, BACKGROUND_TYPE_MAPPING["white"])
     prompt_lines = [
         "A character sticker sheet featuring exactly 9 different expressions arranged in a 3x3 layout on a single seamless canvas. Do NOT draw any grid lines.",
+        "",
+        "CRITICAL: You MUST draw exactly 9 (NINE) character poses in this single image, arranged in a 3x3 grid. Each cell contains one sticker with a different expression.",
+        "",
         f"Character: {character}",
         f"Art Style: {style_desc}",
         "",
         "=== CRITICAL LAYOUT REQUIREMENTS ===",
-        "1. CANVAS: Perfect square (1:1 aspect ratio), logically divided into 3x3=9 equal areas, but visually completely seamless.",
+        "1. CANVAS: Perfect square (1:1 aspect ratio, 1024x1024 pixels total), logically divided into 3x3=9 equal areas, but visually completely seamless.",
         "2. SCENE ALIGNMENT: Each area is a separate camera view. The character should be naturally framed within its area. Do NOT rigidly force the character to the exact mathematical center if the pose (e.g., sitting vs standing) dictates otherwise. Keep a consistent baseline floor.",
         "3. SIZE: Character (including all limbs, hair, accessories) must stay within 70% of each area, leaving at least 15% safe margin on ALL FOUR sides to prevent cutting off during slicing.",
         "4. NO OVERLAP: Absolutely no character parts, hair, limbs, shadows, or text may cross into adjacent areas. Each area is completely independent.",
@@ -282,12 +285,17 @@ def build_animated_prompt(character, style_desc, action, text_overlay, reference
 
     prompt_lines = [
         "A 9-frame animation sprite sheet arranged in 3 rows and 3 columns on a single seamless canvas. Do NOT draw any grid lines.",
+        "",
+        "CRITICAL: You MUST draw exactly 9 (NINE) character poses in this single image, arranged in a 3x3 grid. Each cell contains one frame of the animation.",
+        "",
+        "IMPORTANT: These 9 frames will be sliced and played sequentially as a GIF animation. Each frame MUST show the character at a DIFFERENT moment of the action, with progressive changes. Do NOT draw 9 identical poses - each frame should advance the animation slightly.",
+        "",
         f"Character: {character}",
         f"Art Style: {style_desc}",
         f"Animation: A smooth 9-frame sequence of '{action}'.",
         "",
         "=== CRITICAL LAYOUT REQUIREMENTS ===",
-        "1. CANVAS: Perfect square (1:1 aspect ratio), logically divided into exactly 3x3=9 equal areas, but visually completely seamless.",
+        "1. CANVAS: Perfect square (1:1 aspect ratio, 1024x1024 pixels total), logically divided into exactly 3x3=9 equal areas, but visually completely seamless.",
         "2. ANIMATION SPACE: Treat each area as a consistent fixed camera framing a fixed ground plane. The character must move NATURALLY within this space.",
         "3. NATURAL VERTICAL MOVEMENT: Crucially, if the action involves jumping, flying, or raising up, the character's body MUST be drawn physically higher within that specific frame's area compared to a standing frame. Do NOT artificially lock the character's center of mass to the center of every frame, otherwise the animation will not show vertical displacement.",
         "4. SIZE LIMIT: Character (including all limbs, hair, accessories, and motion effects) must stay within 70% of each area. This means at least 15% empty background margin on ALL FOUR sides of every area.",
@@ -297,21 +305,38 @@ def build_animated_prompt(character, style_desc, action, text_overlay, reference
         "",
         f"Background: {background_desc}",
         "",
-        f"Text: \"{text_overlay}\" - large, bold, comic-style text in each frame, positioned consistently and not covering the character's face.",
+        f"=== TEXT REQUIREMENT (MANDATORY) ===",
+        f"Text content: \"{text_overlay}\"",
+        "",
+        "CRITICAL: You MUST draw this text in EVERY SINGLE ONE of the 9 frames. This is a sticker, and text is essential.",
+        "",
+        "Text styling requirements:",
+        "- Draw the text in ALL 9 frames without exception",
+        "- Use EXTRA LARGE, BOLD font that is clearly readable",
+        "- High contrast (dark text on light background or vice versa)",
+        "- Position consistently (e.g., at the top or bottom of each frame)",
+        "- Comic-style, expressive typography",
+        "- Do NOT let text cover the character's face",
         "",
         "=== NEGATIVE CONSTRAINTS (STRICTLY AVOID) ===",
         NEGATIVE_PROMPT,
     ]
 
     if reference_image:
-        prompt_lines.insert(5, f"Character Reference: Use the provided reference image to maintain identical facial features, hairstyle, and outfit across all 9 frames.")
+        prompt_lines.insert(8, f"Character Reference: Use the provided reference image to maintain identical facial features, hairstyle, and outfit across all 9 frames.")
 
     return "\n".join(prompt_lines)
 
-def create_dir():
-    """在 skill 目录下的 output/ 中创建时间戳工作空间"""
+def create_dir(provider=None):
+    """在 skill 目录下的 output/ 中创建时间戳工作空间
+
+    Args:
+        provider: 可选，指定 provider 用于目录后缀（如 gemini/qwen）
+    """
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     timestamp_dir = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if provider:
+        timestamp_dir = f"{timestamp_dir}_{provider}"
     full_path = os.path.join(OUTPUT_DIR, timestamp_dir)
     os.makedirs(full_path, exist_ok=True)
     out_dir_abs = os.path.abspath(full_path)
@@ -337,11 +362,15 @@ def build_prompts_workspace(target_dir):
     reference_image = data.get("reference_image", "")
     background_type = data.get("background_type", "white")  # 默认白色背景（微信）
 
-    # 归档安全：复制外界基底图到本次发包环境内
+    # 归档安全：复制外界基底图到本次发包环境内（如果已在 target_dir 内则跳过）
     if reference_image and os.path.isfile(reference_image):
-        ref_filename = os.path.basename(reference_image)
-        new_ref_path = os.path.join(target_dir, "reference_" + ref_filename)
-        if os.path.abspath(reference_image) != os.path.abspath(new_ref_path):
+        # 检查 reference_image 是否已经在 target_dir 内
+        ref_abs_path = os.path.abspath(reference_image)
+        target_dir_abs = os.path.abspath(target_dir)
+        if not ref_abs_path.startswith(target_dir_abs + os.sep):
+            # 参考图不在 target_dir 内，需要复制进来
+            ref_filename = os.path.basename(reference_image)
+            new_ref_path = os.path.join(target_dir, "reference_" + ref_filename)
             shutil.copy2(reference_image, new_ref_path)
             reference_image = os.path.abspath(new_ref_path)
 
@@ -384,11 +413,37 @@ def build_prompts_workspace(target_dir):
     print(f"Prompts successfully generated inside {target_dir}")
     return target_dir
 
-def remote_draw_trigger(prompt_path, output_image_path, reference_image_path=None):
-    """调用图片生成 API 生成图像，支持 Gemini 和 千问"""
-    api_key, provider = get_api_key()
+def remote_draw_trigger(prompt_path, output_image_path, reference_image_path=None, provider=None):
+    """调用图片生成 API 生成图像，支持 Gemini 和 千问
+
+    Args:
+        prompt_path: prompt 文件路径
+        output_image_path: 输出图片路径
+        reference_image_path: 可选，参考图路径
+        provider: 可选，指定 "gemini" 或 "qwen"，默认从配置或环境变量读取
+    """
+    config = load_config()
+
+    # 优先使用传入的 provider，否则从配置读取
+    if not provider:
+        provider = config.get("default_provider", "gemini")
+
+    # 尝试从配置获取 api_key
+    provider_config = config["providers"].get(provider, {})
+    api_key = provider_config.get("api_key")
+
+    # 如果配置中没有，尝试从环境变量获取
     if not api_key:
-        return False
+        if provider == "gemini":
+            api_key = os.environ.get("GEMINI_API_KEY")
+        elif provider == "qwen":
+            api_key = os.environ.get("DASHSCOPE_API_KEY")
+
+        if not api_key:
+            # 最后尝试交互式获取
+            api_key, provider = get_api_key()
+            if not api_key:
+                return False
 
     print(f"=== Image Generation ({provider.upper()}) ===")
     print(f"[*] Reading prompt: {prompt_path}")
@@ -493,17 +548,19 @@ def _qwen_generate_image(prompt, output_image_path, reference_image_path=None, a
 
     if is_wanx_model:
         # wanx 系列使用 ImageSynthesis API
-        return _qwen_wanx_generate(prompt, output_image_path, model, api_base_url)
+        return _qwen_wanx_generate(prompt, output_image_path, model, api_base_url, api_key)
     else:
         # qwen-image 系列使用任务提交式 API
-        return _qwen_image_generate(prompt, output_image_path, model, api_base_url, reference_image_path)
+        return _qwen_image_generate(prompt, output_image_path, model, api_base_url, reference_image_path, api_key)
 
 
-def _qwen_wanx_generate(prompt, output_image_path, model=None, api_base_url=None):
+def _qwen_wanx_generate(prompt, output_image_path, model=None, api_base_url=None, api_key=None):
     """ wanx 系列模型的图像生成（使用 ImageSynthesis API）"""
     from dashscope import ImageSynthesis
     import dashscope
 
+    if api_key:
+        dashscope.api_key = api_key
     if api_base_url:
         dashscope.base_url = api_base_url
 
@@ -612,13 +669,20 @@ def _qwen_image_generate(prompt, output_image_path, model=None, api_base_url=Non
         traceback.print_exc()
         return False
 
-def transform_photo_to_chibi(photo_path, style_preset, output_path, additional_description=""):
+def transform_photo_to_chibi(photo_path, style_preset, output_path, additional_description="", provider=None):
     """将真人照片转换为指定风格的角色定妆图
 
     流程（简化版，让 Gemini 处理一切）：
     1. 发送原始照片给 Gemini
     2. Gemini 识别主角 + 转换风格 + 输出单人角色图
     3. 后处理：确保输出尺寸标准（512x512）
+
+    Args:
+        photo_path: 照片路径
+        style_preset: 风格预设
+        output_path: 输出路径
+        additional_description: 额外描述
+        provider: 可选，指定 "gemini" 或 "qwen"，默认从配置或环境变量读取
     """
     print(f"=== Transforming Photo to Sticker Character ===")
     print(f"[*] Input photo: {photo_path}")
@@ -629,9 +693,28 @@ def transform_photo_to_chibi(photo_path, style_preset, output_path, additional_d
         print(f"Error: Photo not found: {photo_path}", file=sys.stderr)
         return False
 
-    api_key, provider = get_api_key()
+    config = load_config()
+
+    # 优先使用传入的 provider，否则从配置读取
+    if not provider:
+        provider = config.get("default_provider", "gemini")
+
+    # 尝试从配置获取 api_key
+    provider_config = config["providers"].get(provider, {})
+    api_key = provider_config.get("api_key")
+
+    # 如果配置中没有，尝试从环境变量获取
     if not api_key:
-        return False
+        if provider == "gemini":
+            api_key = os.environ.get("GEMINI_API_KEY")
+        elif provider == "qwen":
+            api_key = os.environ.get("DASHSCOPE_API_KEY")
+
+        if not api_key:
+            # 最后尝试交互式获取
+            api_key, provider = get_api_key()
+            if not api_key:
+                return False
 
     try:
         from google import genai
@@ -778,21 +861,41 @@ def _process_reference_image(image_data, output_path, target_size=512):
         traceback.print_exc()
         return False
 
-def draw_character_reference(character_prompt, style_preset, output_path):
-    """生成角色定妆参考图（不带动作，纯外观展示）"""
+def draw_character_reference(character_prompt, style_preset, output_path, provider=None):
+    """生成角色定妆参考图（不带动作，纯外观展示）
+
+    Args:
+        character_prompt: 角色外观描述
+        style_preset: 风格预设
+        output_path: 输出路径
+        provider: 可选，指定 "gemini" 或 "qwen"，默认从配置或环境变量读取
+    """
     print(f"=== Generating Character Reference Image ===")
     print(f"[*] Output: {output_path}")
 
-    api_key, provider = get_api_key()
-    if not api_key:
-        return False
+    config = load_config()
 
-    try:
-        from google import genai
-        from google.genai import types
-    except ImportError:
-        print("Error: google-genai not installed. Run: pip install google-genai", file=sys.stderr)
-        return False
+    # 优先使用传入的 provider，否则从配置读取
+    if not provider:
+        provider = config.get("default_provider", "gemini")
+
+    provider_config = config["providers"].get(provider, {})
+    api_key = provider_config.get("api_key")
+    model = provider_config.get("model")
+    api_base_url = provider_config.get("api_base_url", "")
+
+    # 如果配置中没有 api_key，尝试从环境变量获取
+    if not api_key:
+        if provider == "gemini":
+            api_key = os.environ.get("GEMINI_API_KEY")
+        elif provider == "qwen":
+            api_key = os.environ.get("DASHSCOPE_API_KEY")
+
+        if not api_key:
+            # 最后尝试交互式获取
+            api_key, provider = get_api_key()
+            if not api_key:
+                return False
 
     style_desc = STYLE_MAPPING.get(style_preset, STYLE_MAPPING["2D_KAWAII"])
 
@@ -810,34 +913,17 @@ IMPORTANT Requirements:
 - Well-lit, clearly visible details
 - High quality, suitable as a reference for generating more images of this same character
 - The character should have a simple, pleasant expression
+- Output resolution: 512x512 pixels, square aspect ratio
 
 This image will be used as a reference to maintain character consistency across multiple generated images."""
 
-    print(f"[*] Generating with gemini-3.1-flash-image-preview...")
+    print(f"[*] Generating with {provider} (model: {model})...")
 
-    try:
-        client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model="gemini-3.1-flash-image-preview",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_modalities=["TEXT", "IMAGE"]
-            )
-        )
-
-        for part in response.candidates[0].content.parts:
-            if part.inline_data is not None:
-                image_data = part.inline_data.data
-                with open(output_path, "wb") as f:
-                    f.write(image_data)
-                print(f"[✓] Character reference saved: {output_path}")
-                return True
-
-        print("Error: No image in response", file=sys.stderr)
-        return False
-    except Exception as e:
-        print(f"Error generating image: {e}", file=sys.stderr)
-        return False
+    # 根据提供商调用对应的生成函数
+    if provider == "qwen":
+        return _qwen_generate_image(prompt, output_path, None, api_key, model, api_base_url)
+    else:
+        return _gemini_generate_image(prompt, output_path, None, api_key, model)
 
 def _resolve_bg_processing_config(target_dir):
     """从 params.json 读取背景处理配置"""
@@ -1148,6 +1234,50 @@ def process_single_grid(target_dir, bg_cfg=None):
         print(f"[✓] Outputs: {dir_origin}/ (origin only; no nobg/)")
     return True
 
+def _collect_export_gifs(workspace_root):
+    """多组动图（≥2 个 anim_*）时，在 workspace 根目录汇总动图便于导出。
+
+    生成 ``export_gifs/origin/anim_XX.gif``（原图裁剪动图）；若存在去背景结果则另有
+    ``export_gifs/nobg/anim_XX.gif``。仅 1 个 anim_* 时不生成该目录（并删除旧的 export_gifs）。
+    """
+    if not os.path.isdir(workspace_root):
+        return
+
+    anim_dirs = [
+        item
+        for item in sorted(os.listdir(workspace_root))
+        if item.startswith("anim_") and os.path.isdir(os.path.join(workspace_root, item))
+    ]
+    export_root = os.path.join(workspace_root, "export_gifs")
+
+    if len(anim_dirs) < 2:
+        if os.path.isdir(export_root):
+            shutil.rmtree(export_root, ignore_errors=True)
+            print("[*] export_gifs/ omitted (only one anim_* in workspace)")
+        return
+
+    shutil.rmtree(export_root, ignore_errors=True)
+    origin_out = os.path.join(export_root, "origin")
+    nobg_out = os.path.join(export_root, "nobg")
+    os.makedirs(origin_out, exist_ok=True)
+
+    nobg_any = False
+    for anim in anim_dirs:
+        src_o = os.path.join(workspace_root, anim, "origin", "animated_sticker.gif")
+        if os.path.isfile(src_o):
+            shutil.copy2(src_o, os.path.join(origin_out, f"{anim}.gif"))
+        src_n = os.path.join(workspace_root, anim, "nobg", "animated_sticker.gif")
+        if os.path.isfile(src_n):
+            if not nobg_any:
+                os.makedirs(nobg_out, exist_ok=True)
+                nobg_any = True
+            shutil.copy2(src_n, os.path.join(nobg_out, f"{anim}.gif"))
+
+    parts = [f"{origin_out}/"]
+    if nobg_any:
+        parts.append(f"{nobg_out}/")
+    print(f"[✓] export_gifs: {' + '.join(parts)} — copies of animated_sticker.gif for export")
+
 def process_workspace(target_dir):
     bg_cfg = _resolve_bg_processing_config(target_dir)
     if bg_cfg.get("enabled"):
@@ -1162,11 +1292,33 @@ def process_workspace(target_dir):
             sub_dir = os.path.join(target_dir, item)
             if os.path.isdir(sub_dir) and item.startswith("anim_"):
                 process_single_grid(sub_dir, bg_cfg=bg_cfg)
-                
+        _collect_export_gifs(target_dir)
+
     print(f"Batch process complete for workspace: {os.path.abspath(target_dir)}")
 
+def _parse_provider_arg(args):
+    """从参数列表中解析 --provider 参数
+
+    Returns:
+        tuple: (provider, remaining_args)
+    """
+    provider = None
+    remaining = []
+    i = 0
+    while i < len(args):
+        if args[i] == "--provider" and i + 1 < len(args):
+            provider = args[i + 1]
+            i += 2
+        else:
+            remaining.append(args[i])
+            i += 1
+    return provider, remaining
+
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
+    # 先解析 --provider 参数
+    provider_arg, remaining_argv = _parse_provider_arg(sys.argv[1:])
+
+    if not remaining_argv:
         print("Usage:")
         print("  python sticker_utils.py create_dir")
         print("  python sticker_utils.py transform_photo <photo_path> <style_preset> <output_path> [additional_description]")
@@ -1176,44 +1328,51 @@ if __name__ == "__main__":
         print("  python sticker_utils.py draw_with_ref <prompt.txt> <output.png> <reference_image>")
         print("  python sticker_utils.py process <target_directory_path>")
         print("")
+        print("可选参数:")
+        print("  --provider <gemini|qwen>  指定 API 提供商（默认从配置或环境变量读取）")
+        print("")
+        print("环境变量:")
+        print("  GEMINI_API_KEY     Gemini API Key")
+        print("  DASHSCOPE_API_KEY  千问 API Key")
+        print("")
         print("配置管理:")
         print("  python sticker_utils.py config                    # 显示当前配置")
         print("  python sticker_utils.py config set <provider>     # 设置 API Key")
         print("  python sticker_utils.py config default <provider> # 设置默认 provider")
         sys.exit(1)
 
-    cmd = sys.argv[1]
+    cmd = remaining_argv[0]
 
     if cmd == "config":
-        config_command(sys.argv[2:])
+        config_command(remaining_argv[1:])
     elif cmd == "create_dir":
-        create_dir()
+        create_dir(provider=provider_arg)
     elif cmd == "transform_photo":
-        if len(sys.argv) < 5:
-            print("Usage: python sticker_utils.py transform_photo <photo_path> <style_preset> <output_path> [additional_description]")
+        if len(remaining_argv) < 4:
+            print("Usage: python sticker_utils.py transform_photo <photo_path> <style_preset> <output_path> [additional_description] [--provider gemini|qwen]")
             sys.exit(1)
-        photo_path = sys.argv[2]
-        style_preset = sys.argv[3]
-        output_path = sys.argv[4]
-        additional_desc = sys.argv[5] if len(sys.argv) > 5 else ""
-        transform_photo_to_chibi(photo_path, style_preset, output_path, additional_desc)
+        photo_path = remaining_argv[1]
+        style_preset = remaining_argv[2]
+        output_path = remaining_argv[3]
+        additional_desc = remaining_argv[4] if len(remaining_argv) > 4 else ""
+        transform_photo_to_chibi(photo_path, style_preset, output_path, additional_desc, provider=provider_arg)
     elif cmd == "draw_character":
-        if len(sys.argv) < 5:
-            print("Usage: python sticker_utils.py draw_character <character_prompt> <style_preset> <output_path>")
+        if len(remaining_argv) < 4:
+            print("Usage: python sticker_utils.py draw_character <character_prompt> <style_preset> <output_path> [--provider gemini|qwen]")
             sys.exit(1)
-        draw_character_reference(sys.argv[2], sys.argv[3], sys.argv[4])
+        draw_character_reference(remaining_argv[1], remaining_argv[2], remaining_argv[3], provider=provider_arg)
     elif cmd == "build_prompts":
-        build_prompts_workspace(sys.argv[2])
+        build_prompts_workspace(remaining_argv[1])
     elif cmd == "draw":
-        if len(sys.argv) < 4:
-            print("Usage: python sticker_utils.py draw <prompt.txt> <output.png> [reference_image]")
+        if len(remaining_argv) < 3:
+            print("Usage: python sticker_utils.py draw <prompt.txt> <output.png> [reference_image] [--provider gemini|qwen]")
             sys.exit(1)
-        ref_image = sys.argv[4] if len(sys.argv) > 4 else None
-        remote_draw_trigger(sys.argv[2], sys.argv[3], ref_image)
+        ref_image = remaining_argv[3] if len(remaining_argv) > 3 else None
+        remote_draw_trigger(remaining_argv[1], remaining_argv[2], ref_image, provider=provider_arg)
     elif cmd == "draw_with_ref":
-        if len(sys.argv) < 5:
-            print("Usage: python sticker_utils.py draw_with_ref <prompt.txt> <output.png> <reference_image>")
+        if len(remaining_argv) < 4:
+            print("Usage: python sticker_utils.py draw_with_ref <prompt.txt> <output.png> <reference_image> [--provider gemini|qwen]")
             sys.exit(1)
-        remote_draw_trigger(sys.argv[2], sys.argv[3], sys.argv[4])
+        remote_draw_trigger(remaining_argv[1], remaining_argv[2], remaining_argv[3], provider=provider_arg)
     elif cmd == "process":
-        process_workspace(sys.argv[2])
+        process_workspace(remaining_argv[1])
