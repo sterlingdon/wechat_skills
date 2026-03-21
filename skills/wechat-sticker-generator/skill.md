@@ -16,7 +16,7 @@ description: 一键生成符合微信规范的动态(GIF)及静态(PNG)系列表
 - 👤 **灵活角色系统** — 支持原创角色、知名IP、真人Q版化
 - 📸 **真人照片转Q版** — 上传照片→自动转换→生成表情包（保留真人特征）
 - 🔒 **角色一致性锁定** — 通过参考图保证多套件角色长相统一
-- ⚡ **全自动流水线** — 一键生成九宫格→切片→GIF合成
+- ⚡ **全自动流水线** — 一键生成九宫格→切片→GIF 合成；**`origin/`** 为原图仅裁剪缩放，去背景成功时额外多 **`nobg/`**（透明）
 
 ---
 
@@ -67,6 +67,18 @@ python sticker_utils.py config
 
 如果显示 `❌` 表示缺少 API Key，需要引导用户配置。
 
+### 2.4 背景去除依赖（可选但推荐）
+
+当 `background_type` 设为 `transparent` 时，`process` 阶段会自动执行去背景。默认优先走本地模型 `rembg`（推荐 `isnet-general-use`）。
+
+```bash
+# 推荐安装
+pip install rembg
+
+# 如果报 onnxruntime 相关错误，再补一个 CPU 版本
+pip install onnxruntime
+```
+
 ---
 
 ## 3. 完整参数结构 (Input Schema)
@@ -81,6 +93,13 @@ python sticker_utils.py config
   "character_type": "HUMAN_CHIBI",
   "color_mood": "BRIGHT_VIBRANT",
   "background_type": "white",
+  "enable_bg_removal": false,
+  "bg_removal_method": "rembg",
+  "bg_removal_model": "isnet-general-use",
+  "bg_removal_script_path": "",
+  "bg_preserve_overlay": true,
+  "bg_preserve_white_tolerance": 28,
+  "bg_preserve_missing_alpha_below": 220,
   "expressions": [
     {
       "action": "高度戏剧化的动作描述（必须有大幅度的身体运动！）",
@@ -100,7 +119,27 @@ python sticker_utils.py config
 **注意：**
 - 微信表情包平台推荐使用白色背景，审核通过率更高
 - 透明背景适合用作头像、贴纸、或者需要叠加在其他素材上的场景
-- 透明背景会在后处理时自动将白色像素转为透明
+- 透明背景会在后处理时自动去背景（默认 `rembg` 模型）
+- 可通过 `bg_removal_method` 切换：`rembg`（默认）或 `script`（本地脚本）
+- **`bg_preserve_overlay`（默认 true）**：rembg 容易把深色配文当背景抠掉；会在抠图后把「原图不是纯白」却被抹成透明的像素（文字、深色描边等）按原图补回，只去白底
+- 可调 `bg_preserve_white_tolerance`（默认 28）：越大越把浅灰也当「白」不恢复；越小越容易保留浅灰描边/阴影
+- 去背景失败时保留该帧原图，可检查依赖或调整 `bg_removal_model`
+- 去背景开启且成功时，会在同目录下保存 **`original_grid_nobg.png`**：整张九宫格去背景之后、切成 9 张贴纸之前的 PNG，便于对照 `original_grid.png` 检查抠图效果
+- **目录统一**：**`origin/`** 内为**原图输出**（仅裁剪+240 缩放，无压白底、无 rembg）；去背景成功时**额外**多 **`nobg/`**；未开去背景或失败时只有 `origin/`（会删除遗留的 `nobg/` 与旧版 `white/` 目录）
+
+#### 本地脚本模式（`bg_removal_method: "script"`）
+
+建议脚本接口优先支持以下参数形式（主流程会先按这个格式调用）：
+
+```bash
+python your_remove_bg.py --input /tmp/in.png --output /tmp/out.png --model isnet-general-use
+```
+
+如果你的脚本是简版参数，也兼容：
+
+```bash
+python your_remove_bg.py /tmp/in.png /tmp/out.png
+```
 
 ---
 
@@ -267,12 +306,14 @@ output/20260321_120000/
 ├── params.json
 ├── anim_01/
 │   ├── original_grid.png
-│   ├── animated_sticker.gif  ← "996!" 疯狂敲键盘
-│   └── sticker_01~09.png
+│   ├── original_grid_nobg.png   ← 去背景开启时：切片前的整图
+│   ├── prompt.txt
+│   ├── origin/                  ← 必有：原图裁剪 `sticker_01~09.png` +（动图）`animated_sticker.gif`
+│   └── nobg/                    ← 仅去背景成功时：透明套，同上文件名
 ├── anim_02/
-│   └── animated_sticker.gif  ← "寄!" 代码报错石化
+│   └── …
 └── anim_03/
-    └── animated_sticker.gif  ← "润了!" 下班冲刺
+    └── …
 ```
 
 ---
@@ -477,7 +518,6 @@ python sticker_utils.py draw_with_ref $DIR_PATH/anim_02/prompt.txt $DIR_PATH/ani
 ### 【第五步】切片封包
 
 ```bash
-```bash
 python sticker_utils.py process $DIR_PATH
 ```
 
@@ -502,6 +542,11 @@ python sticker_utils.py process $DIR_PATH
 
 返回沙盒目录路径，提醒用户查看：
 
-- 每个动画的 `animated_sticker.gif`
-- 单帧切片 `sticker_01.png` ~ `sticker_09.png`
+- **动图（`mode: animated`）**  
+  - 始终在 **`anim_XX/origin/animated_sticker.gif`**（原图裁剪，无额外处理）  
+  - 去背景成功时另有 **`anim_XX/nobg/animated_sticker.gif`**（透明）
+- **静帧 PNG**  
+  - 始终在 **`anim_XX/origin/sticker_01.png`~`09.png`**（原图裁剪）  
+  - 去背景成功时另有 **`anim_XX/nobg/sticker_01.png`~`09.png`**（透明）
 - 原始九宫格 `original_grid.png`
+- 若开启去背景：同目录 `original_grid_nobg.png`（整图去背景后、切片前）

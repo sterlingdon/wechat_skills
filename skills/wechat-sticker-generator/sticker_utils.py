@@ -3,12 +3,16 @@ import sys
 import json
 import shutil
 import base64
+import tempfile
+import subprocess
+from io import BytesIO
 from datetime import datetime
 from PIL import Image
 
 SKILL_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_DIR = os.path.join(SKILL_DIR, "output")
 CONFIG_FILE = os.path.expanduser("~/.sticker_generator_config.json")
+REMBG_SESSIONS = {}
 
 # ============================================================
 # 多 Provider 配置系统
@@ -230,7 +234,7 @@ COLOR_MOOD_MAPPING = {
 # 背景类型映射
 BACKGROUND_TYPE_MAPPING = {
     "white": "STRICTLY SOLID HIGHEST-PURITY WHITE BACKGROUND (#FFFFFF). Ensure 100% pure flat white with NO noise, NO grain, NO ground shadows, and NO lighting artifacts. The background MUST be perfectly clean uniform hex #FFFFFF across the entire image.",
-    "transparent": "STRICTLY SOLID FLAT WHITE BACKGROUND (#FFFFFF) for later chroma-keying. Do NOT generate checkerboard patterns or alpha transparency. Instead, use a completely uniform, flat, and spotless pure white background with absolutely zero noise, zero gradients, and zero drop shadows. This is critical for clean masking.",
+    "transparent": "STRICTLY SOLID FLAT WHITE BACKGROUND (#FFFFFF) for later automated background removal in post-processing. Do NOT generate checkerboard patterns or alpha transparency. Instead, use a completely uniform, flat, and spotless pure white background with absolutely zero noise, zero gradients, and zero drop shadows.",
 }
 
 # 负面提示词 - 用于避免污染 GIF 输出
@@ -835,13 +839,227 @@ This image will be used as a reference to maintain character consistency across 
         print(f"Error generating image: {e}", file=sys.stderr)
         return False
 
-def process_single_grid(target_dir):
+def _resolve_bg_processing_config(target_dir):
+    """从 params.json 读取背景处理配置"""
+    params_path = os.path.join(target_dir, "params.json")
+    if not os.path.exists(params_path):
+        return {
+            "enabled": False,
+            "method": "none",
+            "model": "isnet-general-use",
+            "script_path": "",
+            "preserve_overlay": True,
+            "preserve_white_tolerance": 28,
+            "preserve_missing_alpha_below": 220,
+        }
+
+    try:
+        with open(params_path, "r", encoding="utf-8") as f:
+            params = json.load(f)
+    except Exception as e:
+        print(f"[!] Failed to parse params.json: {e}", file=sys.stderr)
+        return {
+            "enabled": False,
+            "method": "none",
+            "model": "isnet-general-use",
+            "script_path": "",
+            "preserve_overlay": True,
+            "preserve_white_tolerance": 28,
+            "preserve_missing_alpha_below": 220,
+        }
+
+    background_type = params.get("background_type", "white")
+    enabled = params.get("enable_bg_removal", background_type == "transparent")
+    method = params.get("bg_removal_method", "rembg")
+    model = params.get("bg_removal_model", "isnet-general-use")
+    script_path = params.get("bg_removal_script_path", "")
+    preserve_overlay = params.get("bg_preserve_overlay", True)
+    preserve_white_tolerance = int(params.get("bg_preserve_white_tolerance", 28))
+    preserve_white_tolerance = max(0, min(80, preserve_white_tolerance))
+    preserve_missing_alpha_below = int(params.get("bg_preserve_missing_alpha_below", 220))
+    preserve_missing_alpha_below = max(1, min(255, preserve_missing_alpha_below))
+
+    return {
+        "enabled": bool(enabled),
+        "method": method,
+        "model": model,
+        "script_path": script_path,
+        "preserve_overlay": bool(preserve_overlay),
+        "preserve_white_tolerance": preserve_white_tolerance,
+        "preserve_missing_alpha_below": preserve_missing_alpha_below,
+    }
+
+def _restore_nonwhite_overlays_removed_by_mask(original, masked, white_tolerance=28, removed_if_alpha_below=220):
+    """rembg 等模型常把配文文字当成背景去掉。对「原图不是纯白」却被抠成低 alpha 的像素，用原图 RGB 补回不透明。
+
+    纯白背景仍按 rembg 结果透明；人物边缘主要由 rembg 的 alpha 保留。
+    """
+    o = original.convert("RGBA")
+    m = masked.convert("RGBA")
+    if o.size != m.size:
+        m = m.resize(o.size, Image.Resampling.LANCZOS)
+
+    cut = 255 - max(0, min(80, int(white_tolerance)))
+    thr = max(1, min(255, int(removed_if_alpha_below)))
+
+    try:
+        import numpy as np  # pyright: ignore[reportMissingImports]
+
+        a = np.asarray(o, dtype=np.uint8)
+        b = np.asarray(m, dtype=np.uint8)
+        near_white = (a[..., 0] >= cut) & (a[..., 1] >= cut) & (a[..., 2] >= cut)
+        erased_by_mask = b[..., 3] < thr
+        restore = erased_by_mask & (~near_white)
+        out = np.array(b, copy=True)
+        out[restore, 0:3] = a[restore, 0:3]
+        out[restore, 3] = 255
+        merged = Image.fromarray(out)
+        return merged if merged.mode == "RGBA" else merged.convert("RGBA")
+    except ImportError:
+        px_o = o.load()
+        px_m = m.load()
+        w, h = o.size
+        for y in range(h):
+            for x in range(w):
+                ro, go, bo, ao = px_o[x, y]
+                rm, gm, bm, am = px_m[x, y]
+                if am >= thr:
+                    continue
+                if ro >= cut and go >= cut and bo >= cut:
+                    continue
+                px_m[x, y] = (ro, go, bo, 255)
+        return m
+
+def _remove_background_with_rembg(img, model_name="isnet-general-use"):
+    """使用 rembg 模型做前景分割，返回 RGBA 图像"""
+    try:
+        from rembg import remove, new_session  # pyright: ignore[reportMissingImports]
+    except ImportError:
+        raise RuntimeError("rembg 未安装，请先执行: pip install rembg")
+
+    session = REMBG_SESSIONS.get(model_name)
+    if session is None:
+        session = new_session(model_name)
+        REMBG_SESSIONS[model_name] = session
+
+    if img.mode != "RGBA":
+        img = img.convert("RGBA")
+
+    in_buf = BytesIO()
+    img.save(in_buf, format="PNG")
+    out_bytes = remove(in_buf.getvalue(), session=session)
+    out_img = Image.open(BytesIO(out_bytes))
+    if out_img.mode != "RGBA":
+        out_img = out_img.convert("RGBA")
+    return out_img
+
+def _remove_background_via_local_script(img, script_path, model_name="isnet-general-use"):
+    """调用本地 Python 脚本抠图，优先尝试 --input/--output 参数格式"""
+    if not script_path:
+        raise RuntimeError("未提供 bg_removal_script_path")
+
+    abs_script = os.path.abspath(script_path)
+    if not os.path.isfile(abs_script):
+        raise RuntimeError(f"本地脚本不存在: {abs_script}")
+
+    with tempfile.TemporaryDirectory() as td:
+        in_path = os.path.join(td, "input.png")
+        out_path = os.path.join(td, "output.png")
+        img.save(in_path, "PNG")
+
+        attempts = [
+            [sys.executable, abs_script, "--input", in_path, "--output", out_path, "--model", model_name],
+            [sys.executable, abs_script, in_path, out_path],
+        ]
+
+        last_error = None
+        for cmd in attempts:
+            try:
+                result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+                if result.returncode == 0 and os.path.exists(out_path):
+                    out_img = Image.open(out_path)
+                    if out_img.mode != "RGBA":
+                        out_img = out_img.convert("RGBA")
+                    return out_img
+                last_error = result.stderr.strip() or result.stdout.strip() or f"exit={result.returncode}"
+            except Exception as e:
+                last_error = str(e)
+
+        raise RuntimeError(f"调用本地抠图脚本失败: {last_error}")
+
+def _apply_background_removal(img, bg_cfg):
+    """去背景：仅支持 rembg 或本地脚本；失败则保留原图。"""
+    if not bg_cfg.get("enabled"):
+        return img
+
+    method = str(bg_cfg.get("method", "rembg")).strip().lower()
+    model_name = bg_cfg.get("model", "isnet-general-use")
+    script_path = bg_cfg.get("script_path", "")
+
+    try:
+        if method == "script":
+            out = _remove_background_via_local_script(img, script_path=script_path, model_name=model_name)
+        elif method == "rembg":
+            out = _remove_background_with_rembg(img, model_name=model_name)
+        else:
+            print(f"[!] Unknown bg_removal_method={method}, using rembg", file=sys.stderr)
+            out = _remove_background_with_rembg(img, model_name=model_name)
+
+        if bg_cfg.get("preserve_overlay", True):
+            out = _restore_nonwhite_overlays_removed_by_mask(
+                img,
+                out,
+                white_tolerance=bg_cfg.get("preserve_white_tolerance", 28),
+                removed_if_alpha_below=bg_cfg.get("preserve_missing_alpha_below", 220),
+            )
+        return out
+    except Exception as e:
+        print(f"[!] Background removal failed ({method}): {e}", file=sys.stderr)
+        print("[*] Keeping original image for this frame.", file=sys.stderr)
+        return img
+
+def _slice_grid_to_cells_240(img, width, height):
+    """3×3 切片并缩放到 240×240，按行优先顺序返回 9 张图。"""
+    item_width = width // 3
+    item_height = height // 3
+    cells = []
+    for row in range(3):
+        for col in range(3):
+            left = col * item_width
+            upper = row * item_height
+            box = (left, upper, left + item_width, upper + item_height)
+            cells.append(img.crop(box).resize((240, 240), Image.Resampling.LANCZOS))
+    return cells
+
+def _cleanup_obsolete_flat_sticker_outputs(target_dir):
+    """产物统一进 origin/（及可选 nobg/）前，清理 anim_XX 根目录下旧版平铺的 sticker / GIF。"""
+    try:
+        for name in os.listdir(target_dir):
+            path = os.path.join(target_dir, name)
+            if not os.path.isfile(path):
+                continue
+            if name.startswith("sticker_") and name.endswith(".png"):
+                os.remove(path)
+            elif name.startswith("animated_sticker") and name.endswith(".gif"):
+                os.remove(path)
+    except OSError:
+        pass
+
+def process_single_grid(target_dir, bg_cfg=None):
     grid_path = os.path.join(target_dir, "original_grid.png")
     if not os.path.exists(grid_path):
         print(f"Skipping {target_dir}: original_grid.png not found", file=sys.stderr)
         return False
 
-    # background_type 由大模型 prompt 控制，代码不做任何背景处理
+    bg_cfg = bg_cfg or {
+        "enabled": False,
+        "method": "none",
+        "model": "isnet-general-use",
+        "script_path": "",
+        "preserve_overlay": True,
+        "preserve_white_tolerance": 28,
+        "preserve_missing_alpha_below": 220,
+    }
 
     prompt_path = os.path.join(target_dir, "prompt.txt")
     is_animated = False
@@ -871,85 +1089,79 @@ def process_single_grid(target_dir):
         width, height = size, size
         print(f"[*] Post-process: Auto-cropped non-square canvas into a {size}x{size} square before grid slicing.")
 
-    # 保留图片的原始背景，不做任何后处理转换
+    img_original = img.copy()
 
-    item_width = width // 3
-    item_height = height // 3
+    img_nobg = None
+    if bg_cfg.get("enabled"):
+        processed_grid = _apply_background_removal(img_original, bg_cfg)
+        if processed_grid is not img_original:
+            nobg_path = os.path.join(target_dir, "original_grid_nobg.png")
+            processed_grid.save(nobg_path, "PNG")
+            print(f"[✓] Saved full grid after background removal (pre-slice): {nobg_path}")
+            img_nobg = processed_grid
+        else:
+            print("[!] Background removal skipped or failed; not writing original_grid_nobg.png", file=sys.stderr)
 
-    count = 1
-    frames = []
+    cells_original = _slice_grid_to_cells_240(img_original, width, height)
 
-    for row in range(3):
-        for col in range(3):
-            left = col * item_width
-            upper = row * item_height
-            right = left + item_width
-            lower = upper + item_height
+    cells_nobg = _slice_grid_to_cells_240(img_nobg, width, height) if img_nobg is not None else None
 
-            box = (left, upper, right, lower)
-            cropped_img = img.crop(box)
-
-            # 直接缩放到 240x240，不留边框
-            resized_img = cropped_img.resize((240, 240), Image.Resampling.LANCZOS)
-
-            # 使用原图作为最终输出（已经 240x240）
-            final_img = resized_img
-
-            filename = os.path.join(target_dir, f"sticker_{count:02d}.png")
-            final_img.save(filename, "PNG")
-            frames.append(final_img)
-
-            count += 1
-
-    if is_animated and frames:
-        gif_path = os.path.join(target_dir, "animated_sticker.gif")
-        frames[0].save(
-            gif_path,
+    # origin/：仅九宫格裁剪+缩放到 240，与模型输出一致，不做压白底、不去背景
+    _cleanup_obsolete_flat_sticker_outputs(target_dir)
+    legacy_white = os.path.join(target_dir, "white")
+    if os.path.isdir(legacy_white):
+        shutil.rmtree(legacy_white, ignore_errors=True)
+    dir_origin = os.path.join(target_dir, "origin")
+    os.makedirs(dir_origin, exist_ok=True)
+    for i in range(9):
+        idx = i + 1
+        cells_original[i].save(os.path.join(dir_origin, f"sticker_{idx:02d}.png"), "PNG")
+    if is_animated:
+        cells_original[0].save(
+            os.path.join(dir_origin, "animated_sticker.gif"),
             save_all=True,
-            append_images=frames[1:],
+            append_images=cells_original[1:],
             duration=100,
             loop=0,
-            disposal=2
+            disposal=2,
         )
+
+    dir_nobg = os.path.join(target_dir, "nobg")
+    if cells_nobg is not None:
+        os.makedirs(dir_nobg, exist_ok=True)
+        for i in range(9):
+            idx = i + 1
+            cells_nobg[i].save(os.path.join(dir_nobg, f"sticker_{idx:02d}.png"), "PNG")
+        if is_animated:
+            cells_nobg[0].save(
+                os.path.join(dir_nobg, "animated_sticker.gif"),
+                save_all=True,
+                append_images=cells_nobg[1:],
+                duration=100,
+                loop=0,
+                disposal=2,
+            )
+        print(f"[✓] Outputs: {dir_origin}/ (origin, crop only) + {dir_nobg}/ (transparent)")
+    else:
+        if os.path.isdir(dir_nobg):
+            shutil.rmtree(dir_nobg, ignore_errors=True)
+        print(f"[✓] Outputs: {dir_origin}/ (origin only; no nobg/)")
     return True
 
-def make_white_transparent(img, tolerance=30):
-    """将接近白色的像素转为透明
-
-    Args:
-        img: PIL Image (RGBA mode)
-        tolerance: 白色容差（0-255），用于处理边缘抗锯齿
-
-    Returns:
-        处理后的 RGBA Image
-    """
-    if img.mode != 'RGBA':
-        img = img.convert('RGBA')
-
-    pixels = img.load()
-    width, height = img.size
-
-    for y in range(height):
-        for x in range(width):
-            r, g, b, a = pixels[x, y]
-            # 检测是否接近白色
-            if r >= 255 - tolerance and g >= 255 - tolerance and b >= 255 - tolerance:
-                # 计算与纯白的距离，用于平滑边缘
-                whiteness = max(r, g, b)
-                # 将白色程度转换为透明度
-                new_alpha = int(a * (255 - whiteness) / 255)
-                pixels[x, y] = (r, g, b, new_alpha)
-
-    return img
-
 def process_workspace(target_dir):
+    bg_cfg = _resolve_bg_processing_config(target_dir)
+    if bg_cfg.get("enabled"):
+        print(
+            f"[*] Background removal enabled: method={bg_cfg.get('method')} model={bg_cfg.get('model')}"
+        )
+
     if os.path.exists(os.path.join(target_dir, "prompt.txt")):
-        process_single_grid(target_dir)
+        process_single_grid(target_dir, bg_cfg=bg_cfg)
     else:
         for item in sorted(os.listdir(target_dir)):
             sub_dir = os.path.join(target_dir, item)
             if os.path.isdir(sub_dir) and item.startswith("anim_"):
-                process_single_grid(sub_dir)
+                process_single_grid(sub_dir, bg_cfg=bg_cfg)
                 
     print(f"Batch process complete for workspace: {os.path.abspath(target_dir)}")
 
