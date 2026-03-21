@@ -1,0 +1,23 @@
+{
+  "name": "wechat-article-crawler",
+  "version": "1.0.0",
+  "description": "微信公众号文章抓取、图片下载和内容总结工具",
+  "type": "module",
+  "scripts": {
+    "crawl": "tsx src/index.ts",
+    "summary": "tsx src/summary.ts",
+    "start": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "playwright": "^1.42.0",
+    "turndown": "^7.2.0",
+    "node-html-parser": "^6.1.12",
+    "date-fns": "^3.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/turndown": "^5.0.4",
+    "typescript": "^5.3.3",
+    "tsx": "^4.7.0"
+  }
+}
