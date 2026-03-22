@@ -198,15 +198,18 @@ STYLE_MAPPING = {
     "CUSTOM": "",  # 用户自定义
 }
 
-# 场景主题映射
+# 场景主题映射 (WeChat Official Categories)
 SCENE_MAPPING = {
-    "DAILY_LIFE": "daily life slice-of-life scene",
-    "WORKPLACE": "office workplace setting, relatable work situations",
-    "ROMANCE": "romantic sweet loving atmosphere",
-    "FESTIVAL": "celebration festive holiday mood",
-    "EMOTIONAL": "emotional expressive dramatic mood",
-    "GAMING": "gaming esports competitive vibe",
-    "STUDY": "student study academic setting",
+    "COMPREHENSIVE": "comprehensive daily life slice-of-life scene",      # 综合
+    "FESTIVAL": "celebration festive holiday mood",                       # 节日节气/节日
+    "ROMANCE": "romantic sweet loving atmosphere, dating",                # 恋爱交友
+    "GREETING": "greeting, expressing thanks or apologies",               # 祝福问候/打招呼致谢
+    "WORKPLACE": "office workplace setting, relatable work situations",   # 职场工作
+    "STUDY": "student study academic campus setting",                     # 毕业/学生
+    "GAMING": "gaming esports competitive vibe",                          # 游戏电竞
+    "PETS": "cute funny pet animal situations",                           # 动物萌宠
+    "FOOD": "eating food dining lifestyle",                               # 饮食/美食
+    "SPORTS": "sports fitness workout sweating",                          # 运动健身
 }
 
 # 角色类型提示
@@ -241,8 +244,8 @@ BACKGROUND_TYPE_MAPPING = {
 NEGATIVE_PROMPT = "checkerboard background, transparent background artifacts, noise, film grain, dirty background, dust, shadows on ground, drop shadow, lighting artifacts, borders, frames, grid lines, cell dividers, white borders, black borders, colored borders, padding around character, vignette, shadow effects, glow effects, gradient background, patterned background, scenery, background objects, text watermarks, logos, signatures, low quality, blurry, distorted, deformed, extra limbs, missing limbs, cropped character, character touching grid edges, overlapping cells"
 
 
-def build_static_prompt(character, style_desc, expressions, reference_image="", background_type="white"):
-    background_desc = BACKGROUND_TYPE_MAPPING.get(background_type, BACKGROUND_TYPE_MAPPING["white"])
+def build_static_prompt(character, style_desc, expressions, reference_image="", background_type="transparent"):
+    background_desc = BACKGROUND_TYPE_MAPPING.get(background_type, BACKGROUND_TYPE_MAPPING["transparent"])
     prompt_lines = [
         "A character sticker sheet featuring exactly 9 different expressions arranged in a 3x3 layout on a single seamless canvas. Do NOT draw any grid lines.",
         "",
@@ -269,7 +272,7 @@ def build_static_prompt(character, style_desc, expressions, reference_image="", 
         if i >= 9: break
         t = exp.get('text', '')
         if not t.strip(): t = "WOW!"
-        prompt_lines.append(f"Cell {i+1}: Action: {exp.get('action', '')}. Text overlay: \"{t}\" - large, bold, readable, positioned so it does not hide the face.")
+        prompt_lines.append(f"Cell {i+1}: Action: {exp.get('action', '')}. Text overlay: \"{t}\" - large, bold, readable, positioned so it does not hide the face. MUST use white text with a clear, distinct black outline (or stroke) for visibility on any background.")
 
     prompt_lines.append("")
     prompt_lines.append("=== NEGATIVE CONSTRAINTS (STRICTLY AVOID) ===")
@@ -278,8 +281,8 @@ def build_static_prompt(character, style_desc, expressions, reference_image="", 
     return "\n".join(prompt_lines)
 
 
-def build_animated_prompt(character, style_desc, action, text_overlay, reference_image="", background_type="white"):
-    background_desc = BACKGROUND_TYPE_MAPPING.get(background_type, BACKGROUND_TYPE_MAPPING["white"])
+def build_animated_prompt(character, style_desc, action, text_overlay, reference_image="", background_type="transparent"):
+    background_desc = BACKGROUND_TYPE_MAPPING.get(background_type, BACKGROUND_TYPE_MAPPING["transparent"])
     if not text_overlay or not str(text_overlay).strip():
         text_overlay = f"{str(action).split()[0].upper()}!"
 
@@ -313,7 +316,7 @@ def build_animated_prompt(character, style_desc, action, text_overlay, reference
         "Text styling requirements:",
         "- Draw the text in ALL 9 frames without exception",
         "- Use EXTRA LARGE, BOLD font that is clearly readable",
-        "- High contrast (dark text on light background or vice versa)",
+        "- MUST use bright white text with a thick, distinct black outline (or stroke), ensuring it stands out elegantly on both light and dark backgrounds. Do NOT use plain black or dark text.",
         "- Position consistently (e.g., at the top or bottom of each frame)",
         "- Comic-style, expressive typography",
         "- Do NOT let text cover the character's face",
@@ -360,7 +363,7 @@ def build_prompts_workspace(target_dir):
     character_type = data.get("character_type", "")
     color_mood = data.get("color_mood", "BRIGHT_VIBRANT")
     reference_image = data.get("reference_image", "")
-    background_type = data.get("background_type", "white")  # 默认白色背景（微信）
+    background_type = data.get("background_type", "transparent")  # 默认透明背景（微信要求）
 
     # 归档安全：复制外界基底图到本次发包环境内（如果已在 target_dir 内则跳过）
     if reference_image and os.path.isfile(reference_image):
@@ -397,9 +400,14 @@ def build_prompts_workspace(target_dir):
         style_desc += f", {COLOR_MOOD_MAPPING[color_mood]}"
 
     if mode == "static":
-        prompt_text = build_static_prompt(character, style_desc, expressions, reference_image, background_type)
-        with open(os.path.join(target_dir, "prompt.txt"), "w", encoding="utf-8") as f:
-            f.write(prompt_text)
+        chunk_size = 9
+        chunks = [expressions[i:i + chunk_size] for i in range(0, len(expressions), chunk_size)]
+        for i, chunk in enumerate(chunks):
+            sub_dir = os.path.join(target_dir, f"static_{i+1:02d}")
+            os.makedirs(sub_dir, exist_ok=True)
+            prompt_text = build_static_prompt(character, style_desc, chunk, reference_image, background_type)
+            with open(os.path.join(sub_dir, "prompt.txt"), "w", encoding="utf-8") as f:
+                f.write(prompt_text)
     else:
         for i, exp in enumerate(expressions):
             sub_dir = os.path.join(target_dir, f"anim_{i+1:02d}")
@@ -954,13 +962,13 @@ def _resolve_bg_processing_config(target_dir):
             "preserve_missing_alpha_below": 220,
         }
 
-    background_type = params.get("background_type", "white")
+    background_type = params.get("background_type", "transparent")
     enabled = params.get("enable_bg_removal", background_type == "transparent")
     method = params.get("bg_removal_method", "rembg")
     model = params.get("bg_removal_model", "isnet-general-use")
     script_path = params.get("bg_removal_script_path", "")
     preserve_overlay = params.get("bg_preserve_overlay", True)
-    preserve_white_tolerance = int(params.get("bg_preserve_white_tolerance", 28))
+    preserve_white_tolerance = int(params.get("bg_preserve_white_tolerance", 40))
     preserve_white_tolerance = max(0, min(80, preserve_white_tolerance))
     preserve_missing_alpha_below = int(params.get("bg_preserve_missing_alpha_below", 220))
     preserve_missing_alpha_below = max(1, min(255, preserve_missing_alpha_below))
@@ -975,7 +983,7 @@ def _resolve_bg_processing_config(target_dir):
         "preserve_missing_alpha_below": preserve_missing_alpha_below,
     }
 
-def _restore_nonwhite_overlays_removed_by_mask(original, masked, white_tolerance=28, removed_if_alpha_below=220):
+def _restore_nonwhite_overlays_removed_by_mask(original, masked, white_tolerance=40, removed_if_alpha_below=220):
     """rembg 等模型常把配文文字当成背景去掉。对「原图不是纯白」却被抠成低 alpha 的像素，用原图 RGB 补回不透明。
 
     纯白背景仍按 rembg 结果透明；人物边缘主要由 rembg 的 alpha 保留。
@@ -990,12 +998,29 @@ def _restore_nonwhite_overlays_removed_by_mask(original, masked, white_tolerance
 
     try:
         import numpy as np  # pyright: ignore[reportMissingImports]
+        from PIL import ImageOps, ImageDraw
 
         a = np.asarray(o, dtype=np.uint8)
         b = np.asarray(m, dtype=np.uint8)
         near_white = (a[..., 0] >= cut) & (a[..., 1] >= cut) & (a[..., 2] >= cut)
         erased_by_mask = b[..., 3] < thr
-        restore = erased_by_mask & (~near_white)
+        
+        # Identify the true background by floodfilling from the 4 corners of the near_white mask
+        white_mask = Image.fromarray((near_white * 255).astype(np.uint8)).copy()
+        corners = [
+            (0, 0), 
+            (white_mask.width - 1, 0), 
+            (0, white_mask.height - 1), 
+            (white_mask.width - 1, white_mask.height - 1)
+        ]
+        
+        for corner in corners:
+            if white_mask.getpixel(corner) == 255:
+                ImageDraw.floodfill(white_mask, corner, 128)
+                
+        true_background = (np.array(white_mask) == 128)
+
+        restore = erased_by_mask & (~true_background)
         out = np.array(b, copy=True)
         out[restore, 0:3] = a[restore, 0:3]
         out[restore, 3] = 255
@@ -1031,10 +1056,10 @@ def _remove_background_with_rembg(img, model_name="isnet-general-use"):
     if img.mode != "RGBA":
         img = img.convert("RGBA")
 
-    in_buf = BytesIO()
-    img.save(in_buf, format="PNG")
-    out_bytes = remove(in_buf.getvalue(), session=session)
-    out_img = Image.open(BytesIO(out_bytes))
+    # [Performance Fix]: rembg natively supports reading from and returning PIL.Image blocks.
+    # directly passing the image prevents expensive encoding and decoding memory/cpu leaks
+    out_img = remove(img, session=session)
+    
     if out_img.mode != "RGBA":
         out_img = out_img.convert("RGBA")
     return out_img
@@ -1104,8 +1129,8 @@ def _apply_background_removal(img, bg_cfg):
         print("[*] Keeping original image for this frame.", file=sys.stderr)
         return img
 
-def _slice_grid_to_cells_240(img, width, height):
-    """3×3 切片并缩放到 240×240，按行优先顺序返回 9 张图。"""
+def _slice_grid_to_cells_original(img, width, height):
+    """3×3 切片返回原像素大小的 9 个细胞图，这是做精确单体抠像的核心。"""
     item_width = width // 3
     item_height = height // 3
     cells = []
@@ -1114,7 +1139,7 @@ def _slice_grid_to_cells_240(img, width, height):
             left = col * item_width
             upper = row * item_height
             box = (left, upper, left + item_width, upper + item_height)
-            cells.append(img.crop(box).resize((240, 240), Image.Resampling.LANCZOS))
+            cells.append(img.crop(box))
     return cells
 
 def _cleanup_obsolete_flat_sticker_outputs(target_dir):
@@ -1177,20 +1202,42 @@ def process_single_grid(target_dir, bg_cfg=None):
 
     img_original = img.copy()
 
-    img_nobg = None
+    # 第一步：高精度切片（保持原始高分辨率）
+    cells_original_high_res = _slice_grid_to_cells_original(img_original, width, height)
+    # 对原图直接做 240 缩放存根
+    cells_original = [c.resize((240, 240), Image.Resampling.LANCZOS) for c in cells_original_high_res]
+
+    cells_nobg = None
     if bg_cfg.get("enabled"):
-        processed_grid = _apply_background_removal(img_original, bg_cfg)
-        if processed_grid is not img_original:
+        print(f"[*] Extracting 9 individual bounding-boxes before background removal for ultimate precision...")
+        any_modified = False
+        cells_nobg_high_res = []
+        
+        # 将分离后的单独小图依次交给大模型进行单体去背景，大幅解决整图送去时被判定周边人物为杂散背景的通病
+        for cell in cells_original_high_res:
+            nobg_cell = _apply_background_removal(cell, bg_cfg)
+            cells_nobg_high_res.append(nobg_cell)
+            if nobg_cell is not cell:
+                any_modified = True
+
+        if any_modified:
+            # 去背过后重新缝合成拼贴图 (original_grid_nobg.png) 并供用户参考
+            stitched = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+            item_w = width // 3
+            item_h = height // 3
+            for i, cell in enumerate(cells_nobg_high_res):
+                row = i // 3
+                col = i % 3
+                stitched.paste(cell, (col * item_w, row * item_h))
+                
             nobg_path = os.path.join(target_dir, "original_grid_nobg.png")
-            processed_grid.save(nobg_path, "PNG")
-            print(f"[✓] Saved full grid after background removal (pre-slice): {nobg_path}")
-            img_nobg = processed_grid
+            stitched.save(nobg_path, "PNG")
+            print(f"[✓] Saved stitched full grid after precise cell-by-cell background removal: {nobg_path}")
+            
+            # 把已经切开并且去背完美的高清图缩小致 240 出货
+            cells_nobg = [c.resize((240, 240), Image.Resampling.LANCZOS) for c in cells_nobg_high_res]
         else:
-            print("[!] Background removal skipped or failed; not writing original_grid_nobg.png", file=sys.stderr)
-
-    cells_original = _slice_grid_to_cells_240(img_original, width, height)
-
-    cells_nobg = _slice_grid_to_cells_240(img_nobg, width, height) if img_nobg is not None else None
+            print("[!] Background removal skipped or failed for all cells; not writing original_grid_nobg.png", file=sys.stderr)
 
     # origin/：仅九宫格裁剪+缩放到 240，与模型输出一致，不做压白底、不去背景
     _cleanup_obsolete_flat_sticker_outputs(target_dir)
@@ -1278,6 +1325,152 @@ def _collect_export_gifs(workspace_root):
         parts.append(f"{nobg_out}/")
     print(f"[✓] export_gifs: {' + '.join(parts)} — copies of animated_sticker.gif for export")
 
+def _pack_wechat_export(workspace_root, is_static):
+    """根据微信表情包规范打包导出目录"""
+    if not os.path.isdir(workspace_root):
+        return
+
+    export_root = os.path.join(workspace_root, "wechat_export")
+    shutil.rmtree(export_root, ignore_errors=True)
+    os.makedirs(export_root, exist_ok=True)
+    
+    main_dir = os.path.join(export_root, "main")
+    thumb_dir = os.path.join(export_root, "thumb")
+    os.makedirs(main_dir, exist_ok=True)
+    os.makedirs(thumb_dir, exist_ok=True)
+
+    items = []
+    
+    if is_static:
+        static_dirs = sorted([d for d in os.listdir(workspace_root) if d.startswith("static_")])
+        for d in static_dirs:
+            base = os.path.join(workspace_root, d)
+            target = os.path.join(base, "nobg")
+            if not os.path.exists(target):
+                target = os.path.join(base, "origin")
+            if os.path.exists(target):
+                for i in range(1, 10):
+                    fpath = os.path.join(target, f"sticker_{i:02d}.png")
+                    if os.path.exists(fpath):
+                        items.append(fpath)
+    else:
+        anim_dirs = sorted([d for d in os.listdir(workspace_root) if d.startswith("anim_")])
+        for d in anim_dirs:
+            base = os.path.join(workspace_root, d)
+            target = os.path.join(base, "nobg")
+            if not os.path.exists(target):
+                target = os.path.join(base, "origin")
+            gif_path = os.path.join(target, "animated_sticker.gif")
+            frame_path = os.path.join(target, "sticker_01.png")
+            if os.path.exists(gif_path) and os.path.exists(frame_path):
+                items.append((gif_path, frame_path))
+                
+    # 截取最多 24 个（一组表情专辑16或24个）
+    items = items[:24]
+    
+    first_frame = None
+    
+    for idx, item in enumerate(items):
+        file_idx = idx + 1
+        thumb_name = f"{file_idx:02d}.png"
+        
+        if is_static:
+            src_png = item
+            main_name = f"{file_idx:02d}.png"
+            shutil.copy2(src_png, os.path.join(main_dir, main_name))
+            
+            with Image.open(src_png) as img:
+                thumb = img.resize((120, 120), Image.Resampling.LANCZOS)
+                thumb.save(os.path.join(thumb_dir, thumb_name), "PNG")
+                if first_frame is None:
+                    first_frame = img.copy()
+        else:
+            src_gif, src_frame = item
+            main_name = f"{file_idx:02d}.gif"
+            shutil.copy2(src_gif, os.path.join(main_dir, main_name))
+            
+            with Image.open(src_frame) as img:
+                thumb = img.resize((120, 120), Image.Resampling.LANCZOS)
+                thumb.save(os.path.join(thumb_dir, thumb_name), "PNG")
+                if first_frame is None:
+                    first_frame = img.copy()
+                    
+    # 生成 cover.png (240x240, 透明)
+    if first_frame:
+        cover_path = os.path.join(export_root, "cover.png")
+        first_frame.resize((240, 240), Image.Resampling.LANCZOS).save(cover_path, "PNG")
+        
+        # icon.png (50x50, 透明)
+        icon_path = os.path.join(export_root, "icon.png")
+        first_frame.resize((50, 50), Image.Resampling.LANCZOS).save(icon_path, "PNG")
+        
+    # 生成 banner.png (750x400, 微信明确要求：实心底色，且避免纯白或透明底色，以免和UI撞色)
+    banner_path = os.path.join(export_root, "banner.png")
+    # 采用淡灰黄色作为安全底色 (255, 248, 231)
+    banner = Image.new('RGB', (750, 400), (255, 248, 231))
+    if first_frame:
+        scaled = first_frame.resize((240, 240), Image.Resampling.LANCZOS)
+        if scaled.mode == 'RGBA':
+            banner.paste(scaled, (255, 80), scaled)
+        else:
+            banner.paste(scaled, (255, 80))
+    banner.save(banner_path, "PNG")
+    
+    # 校验产物体积并给出警告（微信强制规范）
+    warnings = []
+    
+    def check_size(filepath, max_kb, name_desc):
+        if os.path.exists(filepath):
+            size_kb = os.path.getsize(filepath) / 1024.0
+            if size_kb > max_kb:
+                warnings.append(f"⚠️ {name_desc} 体积超标: {size_kb:.1f}KB (限制 < {max_kb}KB)")
+
+    for f in os.listdir(main_dir):
+        check_size(os.path.join(main_dir, f), 500, f"主图 {f}")
+    if os.path.exists(thumb_dir):
+        for f in os.listdir(thumb_dir):
+            check_size(os.path.join(thumb_dir, f), 100, f"缩略图 {f}")
+    check_size(os.path.join(export_root, "cover.png"), 500, "封面图 cover.png")
+    check_size(os.path.join(export_root, "icon.png"), 100, "图标 icon.png")
+    check_size(os.path.join(export_root, "banner.png"), 500, "横幅 banner.png")
+    
+    print(f"\n[✓] WeChat standard export package created at: {export_root}")
+    print(f"    Total expressions: {len(items)}")
+    print(f"    - main/ (240x240 { 'PNG' if is_static else 'GIF' })")
+    print(f"    - thumb/ (120x120 PNG)")
+    print(f"    - cover.png (240x240 PNG)")
+    print(f"    - icon.png (50x50 PNG)")
+    print(f"    - banner.png (750x400 JPG/PNG, Default Light Ivory)")
+    
+    # 获取需要输入的材料(名称/介绍/版权) 生成文案留档
+    params_path = os.path.join(workspace_root, "params.json")
+    if os.path.exists(params_path):
+        with open(params_path, "r", encoding="utf-8") as f:
+            try:
+                params = json.load(f)
+                set_name = params.get("set_name", "未命名表情包")
+                set_desc = params.get("set_description", "微信官方表情包套件自动生成产物")
+                copy_info = params.get("copyright_info", "AI Generated")
+                info_path = os.path.join(export_root, "upload_info.txt")
+                with open(info_path, "w", encoding="utf-8") as txt:
+                    txt.write("【微信表情包后台上传资料库】（可直接复制粘贴到微信后台）\n")
+                    txt.write("="*50 + "\n")
+                    txt.write(f"表情包名称 (不超过8字): {set_name}\n")
+                    txt.write(f"表情包介绍 (不超过60字): {set_desc}\n")
+                    txt.write(f"版权信息 / 艺术家: {copy_info}\n")
+                    txt.write("="*50 + "\n")
+                print(f"    - upload_info.txt (包含供直接复制粘贴的 表情包名称/介绍/版权 等填单材料)")
+            except Exception as e:
+                pass
+
+    if warnings:
+        print("\n[!] 微信体积限制体检警告:")
+        for w in warnings:
+            print("   " + w)
+        print("   (提示：若GIF超标，请尝试在外部压制降低帧数或色彩断层)\n")
+    else:
+        print("\n[✓] 产物体检通过: 所有文件体积均符合微信官方限制。\n")
+
 def process_workspace(target_dir):
     bg_cfg = _resolve_bg_processing_config(target_dir)
     if bg_cfg.get("enabled"):
@@ -1285,15 +1478,23 @@ def process_workspace(target_dir):
             f"[*] Background removal enabled: method={bg_cfg.get('method')} model={bg_cfg.get('model')}"
         )
 
+    is_static = False
+    
+    # Process old root prompt structure for backwards compatibility
     if os.path.exists(os.path.join(target_dir, "prompt.txt")):
+        is_static = True
         process_single_grid(target_dir, bg_cfg=bg_cfg)
     else:
         for item in sorted(os.listdir(target_dir)):
             sub_dir = os.path.join(target_dir, item)
-            if os.path.isdir(sub_dir) and item.startswith("anim_"):
+            if os.path.isdir(sub_dir) and (item.startswith("anim_") or item.startswith("static_")):
+                if item.startswith("static_"):
+                    is_static = True
                 process_single_grid(sub_dir, bg_cfg=bg_cfg)
         _collect_export_gifs(target_dir)
 
+    _pack_wechat_export(target_dir, is_static)
+        
     print(f"Batch process complete for workspace: {os.path.abspath(target_dir)}")
 
 def _parse_provider_arg(args):

@@ -16,7 +16,7 @@ description: 一键生成符合微信规范的动态(GIF)及静态(PNG)系列表
 - 👤 **灵活角色系统** — 支持原创角色、知名IP、真人Q版化
 - 📸 **真人照片转Q版** — 上传照片→自动转换→生成表情包（保留真人特征）
 - 🔒 **角色一致性锁定** — 通过参考图保证多套件角色长相统一
-- ⚡ **全自动流水线** — 一键生成九宫格→切片→GIF 合成；**`origin/`** 为原图仅裁剪缩放，去背景成功时额外多 **`nobg/`**（透明）；**≥2 组 `anim_*` 时**根目录生成 **`export_gifs/origin/`** 与 **`export_gifs/nobg/`**（若有透明）汇总全部动图，便于打包导出
+- ⚡ **全自动流水线** — 一键生成九宫格→切片→GIF 合成；**`origin/`** 为原图仅裁剪缩放，去背景成功时额外多 **`nobg/`**（透明）；自动打包符合微信官方表情包标准规范的上传资产，按要求整理产出 **`wechat_export/`** 目录（包含全套规范主图、缩略图、封面、图标、横幅），方便直达打包导出。
 
 ---
 
@@ -26,10 +26,10 @@ description: 一键生成符合微信规范的动态(GIF)及静态(PNG)系列表
 
 本 Skill 支持多种图片生成 API，可灵活切换：
 
-| Provider | 特点 | 获取 API Key |
-|----------|------|-------------|
+| Provider          | 特点               | 获取 API Key                                               |
+| ----------------- | ------------------ | ---------------------------------------------------------- |
 | **gemini** (默认) | 效果好速度快，推荐 | [Google AI Studio](https://aistudio.google.com/app/apikey) |
-| **qwen** | 国内访问稳定 | [阿里云 DashScope](https://dashscope.console.aliyun.com/) |
+| **qwen**          | 国内访问稳定       | [阿里云 DashScope](https://dashscope.console.aliyun.com/)  |
 
 ### 2.2 配置方式
 
@@ -47,14 +47,14 @@ export DASHSCOPE_API_KEY="你的API_Key"
 
 ```bash
 # 显示当前配置
-python sticker_utils.py config
+python3 sticker_utils.py config
 
 # 设置 API Key
-python sticker_utils.py config set gemini
+python3 sticker_utils.py config set gemini
 # 然后输入 API Key
 
 # 切换默认 Provider
-python sticker_utils.py config default qwen
+python3 sticker_utils.py config default qwen
 ```
 
 ### 2.3 首次使用检查
@@ -62,7 +62,7 @@ python sticker_utils.py config default qwen
 在运行任何生成命令前，Agent 应先检查配置：
 
 ```bash
-python sticker_utils.py config
+python3 sticker_utils.py config
 ```
 
 如果显示 `❌` 表示缺少 API Key，需要引导用户配置。
@@ -86,19 +86,22 @@ pip install onnxruntime
 ```json
 {
   "mode": "animated",
+  "set_name": "打工人龙虾",
+  "set_description": "一只每天为了KPI奋斗的Q版龙虾，完美演绎职场辛酸与欢乐！",
+  "copyright_info": "OpenClaw 2026",
   "character_prompt": "角色的外观长相详细设定（只描述外观，不要写动作）",
   "reference_image": "【可选】参考图路径，用于锁定角色长相",
   "style_preset": "2D_KAWAII",
-  "scene_theme": "DAILY_LIFE",
+  "scene_theme": "WORKPLACE",
   "character_type": "HUMAN_CHIBI",
   "color_mood": "BRIGHT_VIBRANT",
-  "background_type": "white",
-  "enable_bg_removal": false,
+  "background_type": "transparent",
+  "enable_bg_removal": true,
   "bg_removal_method": "rembg",
   "bg_removal_model": "isnet-general-use",
   "bg_removal_script_path": "",
   "bg_preserve_overlay": true,
-  "bg_preserve_white_tolerance": 28,
+  "bg_preserve_white_tolerance": 40,
   "bg_preserve_missing_alpha_below": 220,
   "expressions": [
     {
@@ -111,35 +114,35 @@ pip install onnxruntime
 
 ### 3.0 背景类型 (background_type)
 
-| 选项 | 背景描述 | 适用场景 |
-| ---- | -------- | -------- |
-| `white` | 纯白背景 (#FFFFFF) | **默认值**，微信表情包推荐使用 |
-| `transparent` | 透明背景 | 需要贴在其他图片/背景上的场景 |
+| 选项          | 背景描述           | 适用场景                               |
+| ------------- | ------------------ | -------------------------------------- |
+| `transparent` | 透明背景           | **默认值**，微信官方表情包要求透明背景 |
+| `white`       | 纯白背景 (#FFFFFF) | 需要纯色背景时的备选                   |
 
 **注意：**
-- 微信表情包平台推荐使用白色背景，审核通过率更高
-- 透明背景适合用作头像、贴纸、或者需要叠加在其他素材上的场景
+
+- 微信的官方表情包要求透明背景，去除背景更符合审核要求
 - 透明背景会在后处理时自动去背景（默认 `rembg` 模型）
 - 可通过 `bg_removal_method` 切换：`rembg`（默认）或 `script`（本地脚本）
 - **`bg_preserve_overlay`（默认 true）**：rembg 容易把深色配文当背景抠掉；会在抠图后把「原图不是纯白」却被抹成透明的像素（文字、深色描边等）按原图补回，只去白底
-- 可调 `bg_preserve_white_tolerance`（默认 28）：越大越把浅灰也当「白」不恢复；越小越容易保留浅灰描边/阴影
+- 可调 `bg_preserve_white_tolerance`（默认 40）：数值越大，越把浅灰也当作「白底」从而不强行补回，能有效避免脏背景或光斑被“死抠死留”的情况；数值越小则越容易保留真实的浅灰描边或淡阴影。
 - 去背景失败时保留该帧原图，可检查依赖或调整 `bg_removal_model`
 - 去背景开启且成功时，会在同目录下保存 **`original_grid_nobg.png`**：整张九宫格去背景之后、切成 9 张贴纸之前的 PNG，便于对照 `original_grid.png` 检查抠图效果
 - **目录统一**：**`origin/`** 内为**原图输出**（仅裁剪+240 缩放，无压白底、无 rembg）；去背景成功时**额外**多 **`nobg/`**；未开去背景或失败时只有 `origin/`（会删除遗留的 `nobg/` 与旧版 `white/` 目录）
-- **汇总导出**：同一 workspace 下若有 **≥2 个 `anim_*`**，在根目录生成 **`export_gifs/origin/`**（各 `anim_XX.gif`）与 **`export_gifs/nobg/`**（存在透明动图时）；**仅 1 个 `anim_*` 时不生成** `export_gifs/`（并会删除旧的汇总目录）
+- **汇总打包导出**：同一 workspace 在 process 时，会在根目录生成 **`wechat_export/`** 文件夹，它是专用于微信后台的“大礼包”，内含符合规格的主图（`main/`）、缩略图（`thumb/`）、封面（`cover.png`）、图标（`icon.png`）及横幅（`banner.png`）。
 
 #### 本地脚本模式（`bg_removal_method: "script"`）
 
 建议脚本接口优先支持以下参数形式（主流程会先按这个格式调用）：
 
 ```bash
-python your_remove_bg.py --input /tmp/in.png --output /tmp/out.png --model isnet-general-use
+python3 your_remove_bg.py --input /tmp/in.png --output /tmp/out.png --model isnet-general-use
 ```
 
 如果你的脚本是简版参数，也兼容：
 
 ```bash
-python your_remove_bg.py /tmp/in.png /tmp/out.png
+python3 your_remove_bg.py /tmp/in.png /tmp/out.png
 ```
 
 ---
@@ -163,17 +166,20 @@ python your_remove_bg.py /tmp/in.png /tmp/out.png
 | `MEME_STYLE`    | 表情包网红风，魔性夸张           | 搞笑、网络流行   |
 | `CUSTOM`        | 自定义风格（需填写custom_style） | 特殊需求         |
 
-### 3.2 场景主题 (scene_theme)
+### 3.2 场景主题 (scene_theme) 【直接映射微信官方后台使用场景表】
 
-| 选项         | 主题描述   | 常用配文参考                   |
-| ------------ | ---------- | ------------------------------ |
-| `DAILY_LIFE` | 日常生活   | 早安、晚安、干饭、摸鱼、加班   |
-| `WORKPLACE`  | 职场打工人 | 收到、好的、在忙、下班、KPI    |
-| `ROMANCE`    | 恋爱甜宠   | 想你、爱你、么么哒、在吗、晚安 |
-| `FESTIVAL`   | 节日祝福   | 新年快乐、生日快乐、中秋快乐   |
-| `EMOTIONAL`  | 情绪宣泄   | 累了、无语、崩溃、开心、生气   |
-| `GAMING`     | 游戏玩家   | 胜利、GG、带飞、菜鸡、上号     |
-| `STUDY`      | 学习考试   | 加油、不想学、过了、求过       |
+| 选项            | 微信后台对应勾选          | 适用场景及配文参考                |
+| --------------- | ------------------------- | --------------------------------- |
+| `COMPREHENSIVE` | **综合**                  | 日常常用、各类百搭场景            |
+| `FESTIVAL`      | **节日节气** / **节日**   | 新年快乐、生日快乐、中秋快乐      |
+| `ROMANCE`       | **恋爱交友**              | 想你、爱你、么么哒、在吗、晚安    |
+| `GREETING`      | **祝福问候** / **打招呼** | 早安、晚安、谢谢老铁、对不起      |
+| `WORKPLACE`     | **职场工作**              | 收到、好的、在忙、下班、KPI、干饭 |
+| `STUDY`         | **毕业 / 学生**           | 加油、不想学、过了、求过          |
+| `GAMING`        | **游戏电竞**              | 胜利、GG、带飞、菜鸡、上号        |
+| `PETS`          | **动物萌宠**              | 萌喵、傻犬相关专属                |
+| `FOOD`          | **饮食吃饭**              | 喝奶茶、饿了、大餐                |
+| `SPORTS`        | **运动健身**              | 冲刺、流汗、去健身                |
 
 ### 3.3 角色类型 (character_type)
 
@@ -255,14 +261,19 @@ python your_remove_bg.py /tmp/in.png /tmp/out.png
 ```json
 {
   "mode": "animated",
+  "set_name": "秃头小猿",
+  "set_description": "每天修Bug、抗击KPI的卑微打工人日常，虽然头秃但依然坚强！",
+  "copyright_info": "李强制作",
   "character_prompt": "一个中年秃头程序员大叔，圆脸，稀疏的头发，戴厚底黑框眼镜，穿着皱巴巴的格子衬衫，黑眼圈很重，一脸疲惫但眼神呆萌",
   "reference_image": "",
   "style_preset": "MEME_STYLE",
   "scene_theme": "WORKPLACE",
   "character_type": "HUMAN_CHIBI",
   "color_mood": "BRIGHT_VIBRANT",
-  "background_type": "white",
+  "background_type": "transparent",
   "expressions": [
+    // 【💡 提示】微信完整表情包专辑需要 16 或 24 张，因此智能体需为主体设计 24 个不同动作！这会让静态拆作 3 个静态网格（static_01~03），动态拆作 24 个（anim_01~24）。
+    // 以下由于文档篇幅限制仅展示3项：
     {
       "action": "疯狂敲键盘到手指冒烟，眼睛瞪得像铜铃，整个人变成残影，最后累趴在键盘上流口水",
       "text": "996!"
@@ -283,21 +294,21 @@ python your_remove_bg.py /tmp/in.png /tmp/out.png
 
 ```bash
 # Step 1: 创建工作空间（可选 --provider 指定提供商，目录名会自动带上后缀）
-DIR_PATH=$(python sticker_utils.py create_dir --provider gemini)
+DIR_PATH=$(python3 sticker_utils.py create_dir --provider gemini)
 # 输出: /path/to/output/20260321_120000_gemini
 
 # Step 2: 写入 params.json 到 $DIR_PATH/params.json
 
 # Step 3: 解析生成提示词
-python sticker_utils.py build_prompts $DIR_PATH
+python3 sticker_utils.py build_prompts $DIR_PATH
 
-# Step 4: 生成图像（3个动画目录，--provider 可选）
-python sticker_utils.py draw $DIR_PATH/anim_01/prompt.txt $DIR_PATH/anim_01/original_grid.png --provider gemini
-python sticker_utils.py draw $DIR_PATH/anim_02/prompt.txt $DIR_PATH/anim_02/original_grid.png --provider gemini
-python sticker_utils.py draw $DIR_PATH/anim_03/prompt.txt $DIR_PATH/anim_03/original_grid.png --provider gemini
+# Step 4: 循环批量生图（示例假设只有3项；实际完整的24个则需利用 for 循环全部跑完 anim_01 到 anim_24；静态模式下则是 static_01 到 static_03）
+python3 sticker_utils.py draw $DIR_PATH/anim_01/prompt.txt $DIR_PATH/anim_01/original_grid.png --provider gemini
+python3 sticker_utils.py draw $DIR_PATH/anim_02/prompt.txt $DIR_PATH/anim_02/original_grid.png --provider gemini
+python3 sticker_utils.py draw $DIR_PATH/anim_03/prompt.txt $DIR_PATH/anim_03/original_grid.png --provider gemini
 
 # Step 5: 切片合成
-python sticker_utils.py process $DIR_PATH
+python3 sticker_utils.py process $DIR_PATH
 ```
 
 ### 预期产出
@@ -315,13 +326,13 @@ output/20260321_120000_gemini/
 │   └── …
 ├── anim_03/
 │   └── …
-├── export_gifs/                 ← 仅当 anim_* ≥2 时：汇总动图便于导出
-│   ├── origin/
-│   │   ├── anim_01.gif
-│   │   └── anim_02.gif …
-│   └── nobg/                    ← 仅当存在去背景动图时
-│       ├── anim_01.gif
-│       └── …
+├── wechat_export/               ← 🎁 最终直接用于微信平台提交的合规材料包！
+│   ├── main/                    ← 240x240 主图 (编号 01~24, GIF或PNG)
+│   ├── thumb/                   ← 120x120 缩略图 (编号 01~24, PNG)
+│   ├── cover.png                ← 240x240 表情主页面封面图
+│   ├── icon.png                 ← 50x50 聊天窗口面板入口图标
+│   └── banner.png               ← 750x400 顶部详情页横幅展示图
+└── …
 └── …
 ```
 
@@ -334,6 +345,7 @@ output/20260321_120000_gemini/
 ### 使用场景
 
 用户想要：
+
 - 把自己/朋友的照片做成表情包
 - 保持真人特征的同时变成可爱Q版
 - 情侣头像、闺蜜头像表情包化
@@ -341,20 +353,21 @@ output/20260321_120000_gemini/
 ### 完整流程
 
 #### 用户请求示例
+
 > "用我这张照片，帮我做一套可爱的表情包，要那种Q版的，3个动图"
 
 #### Agent 执行步骤
 
 ```bash
 # ========== 第一步：创建工作空间 ==========
-DIR_PATH=$(python sticker_utils.py create_dir --provider gemini)
+DIR_PATH=$(python3 sticker_utils.py create_dir --provider gemini)
 
 # ========== 第二步：照片转Q版定妆图 ==========
 # 用户提供的照片路径
 USER_PHOTO="/path/to/user_photo.jpg"
 
 # 转换为Q版定妆图（核心步骤！）
-python sticker_utils.py transform_photo "$USER_PHOTO" "2D_KAWAII" "$DIR_PATH/base_reference.png" "戴眼镜，短头发"
+python3 sticker_utils.py transform_photo "$USER_PHOTO" "2D_KAWAII" "$DIR_PATH/base_reference.png" "戴眼镜，短头发"
 
 # 输出: base_reference.png - 这张图就是用户的Q版形象
 
@@ -375,50 +388,51 @@ cat > "$DIR_PATH/params.json" << 'EOF'
 EOF
 
 # ========== 第四步：解析裂变 ==========
-python sticker_utils.py build_prompts $DIR_PATH
+python3 sticker_utils.py build_prompts $DIR_PATH
 
 # ========== 第五步：带参考图生成 ==========
 # 注意：这里使用 draw_with_ref 命令，传入参考图！
-python sticker_utils.py draw_with_ref $DIR_PATH/anim_01/prompt.txt $DIR_PATH/anim_01/original_grid.png $DIR_PATH/base_reference.png
-python sticker_utils.py draw_with_ref $DIR_PATH/anim_02/prompt.txt $DIR_PATH/anim_02/original_grid.png $DIR_PATH/base_reference.png
-python sticker_utils.py draw_with_ref $DIR_PATH/anim_03/prompt.txt $DIR_PATH/anim_03/original_grid.png $DIR_PATH/base_reference.png
+python3 sticker_utils.py draw_with_ref $DIR_PATH/anim_01/prompt.txt $DIR_PATH/anim_01/original_grid.png $DIR_PATH/base_reference.png
+python3 sticker_utils.py draw_with_ref $DIR_PATH/anim_02/prompt.txt $DIR_PATH/anim_02/original_grid.png $DIR_PATH/base_reference.png
+python3 sticker_utils.py draw_with_ref $DIR_PATH/anim_03/prompt.txt $DIR_PATH/anim_03/original_grid.png $DIR_PATH/base_reference.png
 
 # ========== 第六步：切片封包 ==========
-python sticker_utils.py process $DIR_PATH
+python3 sticker_utils.py process $DIR_PATH
 ```
 
 ### transform_photo 命令详解
 
 ```bash
-python sticker_utils.py transform_photo <photo_path> <style_preset> <output_path> [additional_description]
+python3 sticker_utils.py transform_photo <photo_path> <style_preset> <output_path> [additional_description]
 ```
 
-| 参数 | 说明 |
-|------|------|
-| `photo_path` | 用户提供的真人照片路径 |
-| `style_preset` | **目标风格** - 支持所有 12 种风格（见下方表格） |
-| `output_path` | 输出的定妆图路径 |
-| `additional_description` | 【可选】额外描述，如"戴眼镜"、"长发"等 |
+| 参数                     | 说明                                            |
+| ------------------------ | ----------------------------------------------- |
+| `photo_path`             | 用户提供的真人照片路径                          |
+| `style_preset`           | **目标风格** - 支持所有 12 种风格（见下方表格） |
+| `output_path`            | 输出的定妆图路径                                |
+| `additional_description` | 【可选】额外描述，如"戴眼镜"、"长发"等          |
 
 **🌟 支持所有风格转换：**
 
-| 风格 | 适合场景 | 转换效果 |
-|------|----------|----------|
-| `2D_KAWAII` | 通用可爱风 | 日系圆润 Q 版 |
-| `2D_ANIME_COOL` | 帅气少年 | 锐利线条，酷感十足 |
-| `3D_CLAY` | 儿童/萌系 | 黏土手办质感 |
-| `3D_PIXAR` | 全年龄 | 皮克斯动画风格 |
-| `PIXEL_ART` | 游戏玩家 | 复古像素风 |
-| `CHINESE_INK` | 文艺国风 | 水墨画风格 |
-| `WATERCOLOR` | 清新治愈 | 水彩手绘感 |
-| `LINE_ART` | 极简风 | 黑白线条画 |
-| `CARTOON_WEST` | 搞笑欧美 | 美式夸张卡通风 |
-| `CHIBI_SD` | 超萌 Q 版 | 头超大身超小 |
-| `MEME_STYLE` | 网络流行 | 魔性表情包风 |
+| 风格            | 适合场景   | 转换效果           |
+| --------------- | ---------- | ------------------ |
+| `2D_KAWAII`     | 通用可爱风 | 日系圆润 Q 版      |
+| `2D_ANIME_COOL` | 帅气少年   | 锐利线条，酷感十足 |
+| `3D_CLAY`       | 儿童/萌系  | 黏土手办质感       |
+| `3D_PIXAR`      | 全年龄     | 皮克斯动画风格     |
+| `PIXEL_ART`     | 游戏玩家   | 复古像素风         |
+| `CHINESE_INK`   | 文艺国风   | 水墨画风格         |
+| `WATERCOLOR`    | 清新治愈   | 水彩手绘感         |
+| `LINE_ART`      | 极简风     | 黑白线条画         |
+| `CARTOON_WEST`  | 搞笑欧美   | 美式夸张卡通风     |
+| `CHIBI_SD`      | 超萌 Q 版  | 头超大身超小       |
+| `MEME_STYLE`    | 网络流行   | 魔性表情包风       |
 
 **🔒 自动优化：**
 
 Gemini 会自动进行以下处理：
+
 1. **主角识别** - 自动识别照片中的主要人物（无需预处理）
 2. **风格转换** - 将真人转换为指定风格的 Q 版角色
 3. **特征保留** - 保留真人关键特征（脸型、发型、眼镜等）
@@ -436,6 +450,7 @@ Gemini 会自动进行以下处理：
 **真人特征保留机制：**
 
 脚本会自动强调保留以下特征：
+
 - 脸型（圆脸/瓜子脸/方脸等）
 - 眼睛形状和神态
 - 鼻子嘴巴特征
@@ -444,14 +459,14 @@ Gemini 会自动进行以下处理：
 
 ### 推荐风格搭配
 
-| 原照片类型 | 推荐风格 | 效果 |
-|------------|----------|------|
-| 普通人像 | `2D_KAWAII` | 日系可爱风，最通用 |
-| 男生照片 | `2D_ANIME_COOL` | 帅气少年风 |
-| 儿童照片 | `3D_CLAY` | 黏土手办感，超萌 |
-| 情侣照片 | `2D_KAWAII` | 甜系 Q 版 |
-| 游戏玩家 | `PIXEL_ART` | 复古游戏风 |
-| 搞笑表情 | `MEME_STYLE` | 网红表情包风 |
+| 原照片类型 | 推荐风格        | 效果               |
+| ---------- | --------------- | ------------------ |
+| 普通人像   | `2D_KAWAII`     | 日系可爱风，最通用 |
+| 男生照片   | `2D_ANIME_COOL` | 帅气少年风         |
+| 儿童照片   | `3D_CLAY`       | 黏土手办感，超萌   |
+| 情侣照片   | `2D_KAWAII`     | 甜系 Q 版          |
+| 游戏玩家   | `PIXEL_ART`     | 复古游戏风         |
+| 搞笑表情   | `MEME_STYLE`    | 网红表情包风       |
 
 ---
 
@@ -463,11 +478,11 @@ Gemini 会自动进行以下处理：
 
 ```bash
 # 1. 创建工作空间
-DIR_PATH=$(python sticker_utils.py create_dir --provider gemini)
+DIR_PATH=$(python3 sticker_utils.py create_dir --provider gemini)
 
 # 2. 生成一张单独的角色定妆图（不带动作，纯外观展示）
 # 参数顺序：character_prompt, style_preset, output_path
-python sticker_utils.py draw_character "角色的character_prompt内容" "2D_KAWAII" "$DIR_PATH/base_reference.png"
+python3 sticker_utils.py draw_character "角色的character_prompt内容" "2D_KAWAII" "$DIR_PATH/base_reference.png"
 
 # 3. 将生成的 base_reference.png 作为 reference_image 写入 params.json
 ```
@@ -487,7 +502,7 @@ python sticker_utils.py draw_character "角色的character_prompt内容" "2D_KAW
 USER_PHOTO="/path/to/user/photo.jpg"
 
 # 转换为Q版定妆图
-python sticker_utils.py transform_photo "$USER_PHOTO" "2D_KAWAII" "$DIR_PATH/base_reference.png"
+python3 sticker_utils.py transform_photo "$USER_PHOTO" "2D_KAWAII" "$DIR_PATH/base_reference.png"
 
 # 之后将 base_reference.png 作为 reference_image 使用
 ```
@@ -497,7 +512,7 @@ python sticker_utils.py transform_photo "$USER_PHOTO" "2D_KAWAII" "$DIR_PATH/bas
 ### 【第一步】沙盒建站
 
 ```bash
-DIR_PATH=$(python sticker_utils.py create_dir --provider gemini)
+DIR_PATH=$(python3 sticker_utils.py create_dir --provider gemini)
 ```
 
 ### 【第二步】写入配置（含 reference_image）
@@ -508,7 +523,7 @@ DIR_PATH=$(python sticker_utils.py create_dir --provider gemini)
 ### 【第三步】解析裂变
 
 ```bash
-python sticker_utils.py build_prompts $DIR_PATH
+python3 sticker_utils.py build_prompts $DIR_PATH
 ```
 
 脚本会自动将 reference_image 写入每个子目录的 prompt.txt
@@ -517,18 +532,20 @@ python sticker_utils.py build_prompts $DIR_PATH
 
 ```bash
 # 情况A：无参考图（或参考图已在prompt中处理）
-python sticker_utils.py draw $DIR_PATH/anim_XX/prompt.txt $DIR_PATH/anim_XX/original_grid.png
+# 注意：Agent 应该使用循环来处理所有存在的 anim_* 或 static_* 目录！
+python3 sticker_utils.py draw $DIR_PATH/anim_01/prompt.txt $DIR_PATH/anim_01/original_grid.png
+# ... 对其他有效目录继续执行 ...
 
 # 情况B：有参考图（真人照片转换的情况，必须用 draw_with_ref！）
-python sticker_utils.py draw_with_ref $DIR_PATH/anim_01/prompt.txt $DIR_PATH/anim_01/original_grid.png $DIR_PATH/base_reference.png
-python sticker_utils.py draw_with_ref $DIR_PATH/anim_02/prompt.txt $DIR_PATH/anim_02/original_grid.png $DIR_PATH/base_reference.png
-# ... 依此类推
+# 注意：同样的，循环调用所有存在拆分后的子目录！
+python3 sticker_utils.py draw_with_ref $DIR_PATH/anim_01/prompt.txt $DIR_PATH/anim_01/original_grid.png $DIR_PATH/base_reference.png
+# ... 对其他有效目录继续执行 ...
 ```
 
 ### 【第五步】切片封包
 
 ```bash
-python sticker_utils.py process $DIR_PATH
+python3 sticker_utils.py process $DIR_PATH
 ```
 
 ---
@@ -541,7 +558,7 @@ python sticker_utils.py process $DIR_PATH
 2. **免动手全自动输入**：Agent 将生成的 `prompt.txt` 内容传给浏览器实体，子程序会自动定位到输入框、粘贴提示词并按下回车，完全无需用户动手复制！
 3. **交付等待**：网页开始生图后，Agent 提醒用户：“我已经打开了浏览器并帮您自动输入了提示词，目前页面正在生成。生成完毕后，请将最满意的九宫格图片保存，并将其文件发给我（或告诉我路径），我会接管切割流程。”
 4. **接力处理**：当用户给出/上传生成的图片后，Agent 将其原样拷贝到 `$DIR_PATH/anim_01/original_grid.png`。
-5. **恢复流水线**：直接跳至第五步，运行 `python sticker_utils.py process $DIR_PATH` 进行全自动切片和拼装。
+5. **恢复流水线**：直接跳至第五步，运行 `python3 sticker_utils.py process $DIR_PATH` 进行全自动切片和拼装。
 
 **附加彩蛋（直接传图切片）**：
 如果用户某天直接丢给你一张早已画好的九宫格网格图，让你“把它做成表情包”。你不需要走 1~4 步生图，直接新建一个沙盒文件夹并把图放进 `anim_01/original_grid.png`，然后直接跑 `process` 命令即可！
@@ -550,14 +567,15 @@ python sticker_utils.py process $DIR_PATH
 
 ## 8. 输出交付 (Output Handover)
 
-返回沙盒目录路径，提醒用户查看：
+返回沙盒目录路径，并**首要提醒用户**查看直接可以上传的终极发布包：
 
-- **动图（`mode: animated`）**  
-  - 始终在 **`anim_XX/origin/animated_sticker.gif`**（原图裁剪，无额外处理）  
-  - 去背景成功时另有 **`anim_XX/nobg/animated_sticker.gif`**（透明）
-- **静帧 PNG**  
-  - 始终在 **`anim_XX/origin/sticker_01.png`~`09.png`**（原图裁剪）  
-  - 去背景成功时另有 **`anim_XX/nobg/sticker_01.png`~`09.png`**（透明）
-- 原始九宫格 `original_grid.png`
-- 若开启去背景：同目录 `original_grid_nobg.png`（整图去背景后、切片前）
-- **多组动图时**：根目录 **`export_gifs/origin/*.gif`**（原图动图）、**`export_gifs/nobg/*.gif`**（透明动图，有则生成）；单组动图无此目录
+- 🎁 **微信直接上传规范包 `wechat_export/`（核心产物）**：
+  - **`wechat_export/main/`**：包含编号为 `01~24` 的 240x240 主图，满足规范约束。
+  - **`wechat_export/thumb/`**：包含编号为 `01~24` 的 120x120 小方块缩略图。
+  - **`wechat_export/cover.png`**、**`icon.png`**、**`banner.png`**：引擎自动化截取配置的首发配套资产图。
+  - **`wechat_export/upload_info.txt`**：自动生成的表情包名称、介绍、版权信息，可以直接去微信后台复制粘贴。
+
+- ✂️ **过程拆解留档资产（存于 `anim_XX/` 或 `static_XX/` 内）**
+  - **`origin/`** 存放各画稿原始提取未抠背产物
+  - **`nobg/`** 存放各底稿执行抠背透明提取后的版本
+  - **`original_grid_nobg.png`** 为网格整底切除的预览大参考图
