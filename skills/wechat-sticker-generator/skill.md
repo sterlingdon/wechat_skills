@@ -309,6 +309,10 @@ python3 sticker_utils.py draw $DIR_PATH/anim_03/prompt.txt $DIR_PATH/anim_03/ori
 
 # Step 5: 切片合成
 python3 sticker_utils.py process $DIR_PATH
+
+# Step 6: AI 补充微信物料（Banner / Cover / 介绍文案）
+# 所有信息均从 $DIR_PATH/params.json 动态读取，无需手动传入角色名或场景
+python3 wechat_meta.py $DIR_PATH
 ```
 
 ### 预期产出
@@ -472,40 +476,41 @@ Gemini 会自动进行以下处理：
 
 ## 7. 智能体执行流程 (Execution Workflow)
 
-### 【第零步】角色定妆（如果没有 reference_image）
+### 【第零步】角色定妆（统一生成标准基准图）
 
-**⚠️ 关键：如果用户没有提供参考图，必须先生成一张"角色定妆图"作为后续所有生成的基准！**
+**⚠️ 核心定律：所有表情包的生成，必须依赖一张绝对中立、没有夸张动作的“定妆图” (`base_reference.png`)。决不允许直接拿未经处理的复杂照片或原图去跑多格表情包，也决不允许把夸张动作写进定妆步骤！**
 
+Agent 必须根据用户提供的素材情况，严格选择以下三条路线之一来获取 `base_reference.png`：
+
+**情况 A：用户完全没有提供图片（只给了文字）**
+必须先让 AI “无中生有”画一张标准定妆图。
 ```bash
 # 1. 创建工作空间
 DIR_PATH=$(python3 sticker_utils.py create_dir --provider gemini)
 
-# 2. 生成一张单独的角色定妆图（不带动作，纯外观展示）
+# 2. 生成单独的角色定妆图（必须纯外观展示，绝无夸张动作）
 # 参数顺序：character_prompt, style_preset, output_path
-python3 sticker_utils.py draw_character "角色的character_prompt内容" "2D_KAWAII" "$DIR_PATH/base_reference.png"
+python3 sticker_utils.py draw_character "角色的外观描述..." "2D_KAWAII" "$DIR_PATH/base_reference.png"
 
 # 3. 将生成的 base_reference.png 作为 reference_image 写入 params.json
 ```
 
-**为什么这步必须？**
-
-- 没有 reference_image 时，每次调用生图 API 都会重新"想象"角色
-- 结果：anim_01 里的角色是圆脸，anim_02 里的角色变成瓜子脸
-- 有了定妆图，所有后续生成都会参考这张图的五官、发型、服装
-
-**🆕 情况B：用户提供了真人照片**
-
-如果用户提供了真人照片，使用 `transform_photo` 命令：
-
+**情况 B：用户提供了一张原始图片（例如：真人照片、未处理的插画、背景复杂的原图）**
+**绝对不能**直接拿原图去跑表情包流水线！必须先将其“提取优化”成一张规范的标准定妆图。
+**⚠️ 致命红线：转换时的 `additional_description` 必须强硬要求“保持中立、面无表情、没有任何动作、纯白背景”。绝对不能把表情包要做的夸张动作（如吐血、大哭、疯狂敲键盘）写进这个指令里！**
 ```bash
-# 用户照片路径
+# 1. 创建工作空间
+DIR_PATH=$(python3 sticker_utils.py create_dir --provider gemini)
+
+# 2. 将复杂原图/照片转换为干净的标准定妆图
 USER_PHOTO="/path/to/user/photo.jpg"
+python3 sticker_utils.py transform_photo "$USER_PHOTO" "MEME_STYLE" "$DIR_PATH/base_reference.png" "保持角色外观特征不变。输出一张纯粹的、面无表情或正常微笑的角色参考图（定妆图）。绝对不要有任何夸张动作、不要有疲惫感。纯白背景，正面半身像。"
 
-# 转换为Q版定妆图
-python3 sticker_utils.py transform_photo "$USER_PHOTO" "2D_KAWAII" "$DIR_PATH/base_reference.png"
-
-# 之后将 base_reference.png 作为 reference_image 使用
+# 3. 之后，将生成的 base_reference.png 作为 reference_image 写入 params.json
 ```
+
+**情况 C：用户提供了一张**已经处理好的、完美的**中立标准定妆图**
+只有在用户明确表示“这张图已经是一张定妆图”，或者该图显然是纯白背景、正面中立的标准化形象时，才可以跳过生图步骤，直接把它当作 `reference_image` 填入 `params.json`。
 
 ---
 
@@ -547,6 +552,31 @@ python3 sticker_utils.py draw_with_ref $DIR_PATH/anim_01/prompt.txt $DIR_PATH/an
 ```bash
 python3 sticker_utils.py process $DIR_PATH
 ```
+
+---
+
+### 【第六步】AI 补充微信物料（Banner / Cover / 介绍文案）
+
+⚠️ **这是主流程必要步骤，不是可选操作！** `process` 命令会生成基础的 `wechat_export/`，但 cover 和 banner 只是从第一帧截取的占位图。本步骤会调用 AI 生成真正的专属封面、横幅和完整上传文案。
+
+```bash
+# 所有信息（角色名、场景主题、吉祥物外观等）均自动从 $DIR_PATH/params.json 读取
+# Agent 只需传入目录路径，无需硬写任何角色或场景信息
+python3 wechat_meta.py $DIR_PATH
+```
+
+**本步骤的产出（会覆盖 process 的占位内容）：**
+
+| 产物文件 | 规格 | 说明 |
+|---|---|---|
+| `wechat_export/upload_info.txt` | 文本 | AI 生成的≤80字合集介绍 + 每个表情的4字含义标签 + 风格/主题分类 |
+| `wechat_export/banner.png` | 750×400 | AI 专属绘制的横幅（角色与场景主题融合，含合集名称创意排版） |
+| `wechat_export/cover.png` | 240×240 | AI 专属绘制的封面（角色特写，直视镜头，高吸引力） |
+| `wechat_export/icon.png` | 50×50 | 封面缩小版，用于聊天面板图标 |
+
+**动态读取机制（重要）：** `wechat_meta.py` 的所有 AI Prompt 均通过读取 `params.json` 动态组装：
+- `set_name`、`character_prompt`、`scene_theme`、`style_preset` 等字段都从 params 文件取值
+- 脚本本身不含任何硬编码的角色名或场景，适用于任意表情包套件
 
 ---
 

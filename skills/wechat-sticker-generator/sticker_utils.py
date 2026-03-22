@@ -24,13 +24,15 @@ DEFAULT_CONFIG = {
         "gemini": {
             "api_key_env": "GEMINI_API_KEY",  # 从环境变量读取的 key 名
             "alt_env_keys": ["GOOGLE_API_KEY"],  # 备选环境变量名
-            "model": "gemini-3.1-flash-image-preview",
+            "model": "gemini-3.1-flash-image-preview",  # 图像生成模型
+            "text_model": "gemini-2.5-flash",            # 文本生成模型
             "description": "Google Gemini - 推荐，效果好速度快"
         },
         "qwen": {
             "api_key_env": "DASHSCOPE_API_KEY",
             "alt_env_keys": ["QWEN_API_KEY"],
-            "model": "qwen-vl-max",
+            "model": "qwen-vl-max",             # 图像生成模型
+            "text_model": "qwen-max",           # 文本生成模型
             "description": "阿里千问 - 国内访问稳定"
         }
         # 可以继续添加其他 provider...
@@ -264,7 +266,7 @@ def build_static_prompt(character, style_desc, expressions, reference_image="", 
         f"Background: {background_desc}",
     ]
     if reference_image:
-        prompt_lines.append(f"Character Reference: Use the provided reference image to maintain identical facial features, hairstyle, and outfit across all 9 frames.")
+        prompt_lines.append(f"Character Reference: Use the provided reference image to accurately draw the exact same character (same shape, colors, features, and overall design) across all 9 frames.")
 
     prompt_lines.append("")
     prompt_lines.append("=== EXPRESSIONS (3 rows × 3 columns, each centered in its cell) ===")
@@ -272,7 +274,7 @@ def build_static_prompt(character, style_desc, expressions, reference_image="", 
         if i >= 9: break
         t = exp.get('text', '')
         if not t.strip(): t = "WOW!"
-        prompt_lines.append(f"Cell {i+1}: Action: {exp.get('action', '')}. Text overlay: \"{t}\" - large, bold, readable, positioned so it does not hide the face. MUST use white text with a clear, distinct black outline (or stroke) for visibility on any background.")
+        prompt_lines.append(f"Cell {i+1}: Action: {exp.get('action', '')}. Text overlay: \"{t}\" - use highly creative typography matching the emotion. Pick vibrant text colors and distinct bold outlines. TEXT GROUPING: Keep all letters tightly grouped together as a single block without scattering. Position it playfully inside this cell's boundaries without cutting off.")
 
     prompt_lines.append("")
     prompt_lines.append("=== NEGATIVE CONSTRAINTS (STRICTLY AVOID) ===")
@@ -315,10 +317,11 @@ def build_animated_prompt(character, style_desc, action, text_overlay, reference
         "",
         "Text styling requirements:",
         "- Draw the text in ALL 9 frames without exception",
-        "- Use EXTRA LARGE, BOLD font that is clearly readable",
-        "- MUST use bright white text with a thick, distinct black outline (or stroke), ensuring it stands out elegantly on both light and dark backgrounds. Do NOT use plain black or dark text.",
-        "- Position consistently (e.g., at the top or bottom of each frame)",
-        "- Comic-style, expressive typography",
+        "- Use highly creative, dynamic typography that perfectly matches the emotion and action of the character",
+        "- TEXT COLOR & VARIATION: Vary the font color, style, size, tilt, and weight (e.g., jagged for screaming, bouncy for happy) across the frames to create a natural bouncy animation effect",
+        "- Ensure text colors and bold outlines are vibrant and readable",
+        "- TEXT GROUPING: Keep all letters of the word tightly grouped together as a single cohesive block. Do NOT scatter individual letters apart. The text should move and bounce naturally as one unit.",
+        "- Position dynamically and playfully around the character (e.g., floating or slanted) but keep it fully inside the frame boundaries",
         "- Do NOT let text cover the character's face",
         "",
         "=== NEGATIVE CONSTRAINTS (STRICTLY AVOID) ===",
@@ -326,7 +329,7 @@ def build_animated_prompt(character, style_desc, action, text_overlay, reference
     ]
 
     if reference_image:
-        prompt_lines.insert(8, f"Character Reference: Use the provided reference image to maintain identical facial features, hairstyle, and outfit across all 9 frames.")
+        prompt_lines.insert(8, f"Character Reference: Use the provided reference image to accurately draw the exact same character (same shape, colors, features, and overall design) across all frames.")
 
     return "\n".join(prompt_lines)
 
@@ -501,7 +504,7 @@ def _gemini_generate_image(prompt, output_image_path, reference_image_path=None,
             mime_type = f"image/{img_type}" if img_type else "image/jpeg"
 
             # 构建多模态输入
-            enhanced_prompt = prompt + "\n\n[CRITICAL: The person in the reference image above is the character you must draw. Transform them into the requested style while preserving their key facial features (face shape, eyes, nose, mouth, hair style). Keep the character recognizable!]"
+            enhanced_prompt = prompt + "\n\n[CRITICAL: The image provided is the exact character you MUST draw. Replicate its design, colors, shape, and features perfectly in all frames while following the requested action and style.]"
             contents = [
                 types.Part.from_bytes(data=image_data, mime_type=mime_type),
                 enhanced_prompt  # 文字直接作为字符串
@@ -764,11 +767,13 @@ def transform_photo_to_chibi(photo_path, style_preset, output_path, additional_d
 STEP 1 - IDENTIFY THE MAIN PERSON:
 Look at the photo and identify the main person/character. Focus on the most prominent person if there are multiple people.
 
-STEP 2 - PRESERVE KEY FEATURES:
-Keep the person's distinctive facial features recognizable:
-- Face shape, eye shape, nose and mouth characteristics
-- Hair style and color
-- Any distinctive features (glasses, beard, accessories, etc.)
+STEP 2 - PRESERVE KEY FEATURES (EXTREMELY IMPORTANT):
+You MUST keep the character looking as close to the original person as possible while adapting the art style:
+- EXACT Hair: Keep the exact same hairstyle, length, and hair color.
+- EXACT Clothing: Keep the exact same clothing (style, color, and visible details). Do NOT invent new outfits.
+- EXACT Palette: Use the same color palette as the original photo.
+- Facial Features: Preserve the face shape, eye shape, and any distinctive features (glasses, accessories, etc.).
+- Do not add random accessories or change the subject's gender/age.
 
 STEP 3 - STYLE TRANSFORMATION:
 {style_transform}
