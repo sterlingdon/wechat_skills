@@ -9,7 +9,7 @@ A collection of high-quality skills for AI agents (OpenCode, Claude Code, etc.),
 If you have the `skills` CLI installed, you can add this entire collection with one command:
 
 ```bash
-npx skills add <your-github-username>/ai-skills -g
+npx skills add sterlingdon/wechat_skills -g
 ```
 
 ### Option 2: Manual Installation (For OpenCode)
@@ -18,7 +18,7 @@ To use these skills in your OpenCode environment:
 
 1. **Clone this repository** to your local config directory:
    ```bash
-   git clone https://github.com/<your-github-username>/ai-skills.git ~/.config/opencode/my-skills
+   git clone https://github.com/sterlingdon/wechat_skills.git ~/.config/opencode/my-skills
    ```
 
 2. **Create a symlink** to make the skills discoverable:
