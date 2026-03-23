@@ -3,9 +3,49 @@ import sys
 import tempfile
 import subprocess
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 
 REMBG_SESSIONS = {}
+
+
+def _feather_alpha_edges(img, radius=1.5):
+    """Feather alpha edges to reduce jagged appearance in GIF output."""
+    if img.mode != "RGBA":
+        img = img.convert("RGBA")
+    
+    try:
+        arr = np.array(img)
+        alpha = arr[:, :, 3].astype(np.float32) / 255.0
+        
+        edge_mask = (alpha > 0.05) & (alpha < 0.98)
+        if not np.any(edge_mask):
+            return img
+        
+        try:
+            import cv2
+            kernel = np.ones((3, 3), np.uint8)
+            edge_mask_dilated = cv2.dilate(edge_mask.astype(np.uint8), kernel, iterations=1)
+            blur_region = edge_mask_dilated > 0
+        except ImportError:
+            blur_region = edge_mask
+        
+        alpha_pil = Image.fromarray((alpha * 255).astype(np.uint8), mode='L')
+        alpha_blurred = alpha_pil.filter(ImageFilter.GaussianBlur(radius=radius))
+        alpha_blurred_arr = np.array(alpha_blurred).astype(np.float32) / 255.0
+        
+        final_alpha = alpha.copy()
+        final_alpha[blur_region] = alpha_blurred_arr[blur_region]
+        
+        final_alpha_pil = Image.fromarray((final_alpha * 255).astype(np.uint8), mode='L')
+        final_alpha_pil = final_alpha_pil.filter(ImageFilter.GaussianBlur(radius=0.5))
+        
+        arr[:, :, 3] = np.array(final_alpha_pil)
+        return Image.fromarray(arr, 'RGBA')
+    
+    except Exception as e:
+        print(f"[*] Edge feathering failed: {e}, returning original", file=sys.stderr)
+        return img
+
 
 def _sharpen_alpha_edges(img, threshold=200):
     if img.mode != "RGBA":
@@ -143,6 +183,8 @@ def apply_background_removal(img, bg_cfg):
     model_name = bg_cfg.get("model", "isnet-anime")
     script_path = bg_cfg.get("script_path", "")
     alpha_matting = bg_cfg.get("alpha_matting", True)
+    feather_edges = bg_cfg.get("feather_edges", True)
+    feather_radius = bg_cfg.get("feather_radius", 1.5)
     sharpen_edges = bg_cfg.get("sharpen_edges", False)
     sharpen_threshold = bg_cfg.get("sharpen_threshold", 200)
 
@@ -160,11 +202,13 @@ def apply_background_removal(img, bg_cfg):
             print(f"[!] Unknown bg_removal_method={method}, using dual", file=sys.stderr)
             out = _remove_background_dual(img, model_name=model_name, alpha_matting=alpha_matting)
 
-        # Sanitize alpha: zero out very faint residues (prevents ghosting/flicker in GIFs)
         if out is not None and out.mode == "RGBA":
             arr = np.array(out)
             arr[arr[:,:,3] < 10, 3] = 0
             out = Image.fromarray(arr)
+
+        if feather_edges:
+            out = _feather_alpha_edges(out, radius=feather_radius)
 
         if sharpen_edges:
             out = _sharpen_alpha_edges(out, threshold=sharpen_threshold)

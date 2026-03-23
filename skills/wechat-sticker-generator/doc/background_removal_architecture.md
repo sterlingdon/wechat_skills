@@ -159,6 +159,8 @@ is_mostly_white_background(img, threshold=245)
   "bg_removal_method": "dual",
   "bg_removal_model": "isnet-anime",
   "bg_alpha_matting": true,
+  "feather_edges": true,
+  "feather_radius": 1.5,
   "sharpen_edges": false,
   "sharpen_threshold": 200
 }
@@ -173,6 +175,8 @@ is_mostly_white_background(img, threshold=245)
 | `bg_removal_method` | string | `dual` | 算法：`opencv` / `rembg` / `dual` / `script` |
 | `bg_removal_model` | string | `isnet-anime` | Rembg 模型 |
 | `bg_alpha_matting` | bool | `true` | Rembg 边缘后处理 |
+| `feather_edges` | bool | `true` | **边缘羽化**：平滑 Alpha 边缘，减少 GIF 锯齿 |
+| `feather_radius` | float | `1.5` | 羽化半径（越大越柔和） |
 | `sharpen_edges` | bool | `false` | 是否锐化边缘 |
 | `sharpen_threshold` | int | `200` | 锐化阈值 |
 
@@ -211,6 +215,21 @@ Rembg 失败 → 仅使用 OpenCV 结果
 ### 5.3 Alpha 清洗
 
 所有处理完成后，强制 `Alpha < 10` 归零，防止 GIF 杂色噪点。
+
+### 5.4 边缘羽化 (Edge Feathering)
+
+**问题**：GIF 格式只支持 1-bit 透明度，半透明像素会被强制转为透明或不透明，导致边缘锯齿。
+
+**解决方案**：对 Alpha 边缘做高斯模糊平滑过渡。
+
+```
+原始 Alpha:  0 | 50 | 128 | 200 | 255  (锯齿边缘)
+羽化后:      0 | 30 | 100 | 180 | 255  (平滑过渡)
+```
+
+**参数**：
+- `feather_edges`: 是否启用（默认 `true`）
+- `feather_radius`: 羽化半径（默认 `1.5`，越大越柔和）
 
 ---
 
