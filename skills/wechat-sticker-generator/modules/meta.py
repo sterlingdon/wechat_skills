@@ -148,13 +148,15 @@ def generate_meta(target_dir, provider=None, skill_dir=None):
 
     print("  -> 画 Banner 中...")
     if not os.path.exists(banner_raw):
-        remote_draw_trigger(banner_prompt_file, banner_raw, ref_img, provider)
+        # Banner 需要 750x400 (1.875:1)，生成 1280x720 (1.778:1) 接近比例
+        remote_draw_trigger(banner_prompt_file, banner_raw, ref_img, provider, size="1280*720")
     else:
         print("  -> (缓存已存在跳过生成)")
 
     print("  -> 画 Cover 中...")
     if not os.path.exists(cover_raw):
-        remote_draw_trigger(cover_prompt_file, cover_raw, ref_img, provider)
+        # Cover 需要 240x240 (1:1)，生成 512x512 正方形
+        remote_draw_trigger(cover_prompt_file, cover_raw, ref_img, provider, size="512*512")
     else:
         print("  -> (缓存已存在跳过生成)")
 

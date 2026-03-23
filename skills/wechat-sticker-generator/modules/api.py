@@ -59,7 +59,7 @@ def _gemini_generate_image(prompt, output_image_path, reference_image_path=None,
         return False
 
 
-def _qwen_wanx_generate(prompt, output_image_path, model=None, api_base_url=None, api_key=None):
+def _qwen_wanx_generate(prompt, output_image_path, model=None, api_base_url=None, api_key=None, size=None):
     """ wanx 系列模型的图像生成（使用 ImageSynthesis API）"""
     from dashscope import ImageSynthesis
     import dashscope
@@ -74,7 +74,7 @@ def _qwen_wanx_generate(prompt, output_image_path, model=None, api_base_url=None
             model=model or "wanx2.1-t2i-turbo",
             prompt=prompt,
             n=1,
-            size="1024*1024"
+            size=size or "1024*1024"
         )
 
         if response.status_code == 200 and response.output and response.output.results:
@@ -93,7 +93,7 @@ def _qwen_wanx_generate(prompt, output_image_path, model=None, api_base_url=None
         return False
 
 
-def _qwen_image_generate(prompt, output_image_path, model=None, api_base_url=None, reference_image_path=None, api_key=None):
+def _qwen_image_generate(prompt, output_image_path, model=None, api_base_url=None, reference_image_path=None, api_key=None, size=None):
     """qwen-image 系列模型的图像生成（使用 MultiModalConversation API）"""
     import dashscope
     from dashscope import MultiModalConversation
@@ -127,12 +127,11 @@ def _qwen_image_generate(prompt, output_image_path, model=None, api_base_url=Non
         response = MultiModalConversation.call(
             model=model or 'qwen-image-2.0-pro',
             messages=messages,
-            result_format='message',
             stream=False,
             watermark=False,
             prompt_extend=True,
             negative_prompt="透明格子背景，伪透明背景，噪点，杂质，杂色，颗粒感，地面阴影，投影，光影伪造，边框，网格线，白色边框，黑色边框，分割线，画框，低分辨率，低画质，肢体畸形，手指畸形，画面过饱和，蜡像感，人脸无细节，过度光滑，画面具有 AI 感，构图混乱，文字模糊，扭曲，背景污染，渐变背景，花纹背景，阴影效果，发光效果",
-            size='1024*1024'
+            size=size or '1024*1024'
         )
 
         if response.status_code == 200:
@@ -164,7 +163,7 @@ def _qwen_image_generate(prompt, output_image_path, model=None, api_base_url=Non
         traceback.print_exc()
         return False
 
-def _qwen_generate_image(prompt, output_image_path, reference_image_path=None, api_key=None, model=None, api_base_url=None):
+def _qwen_generate_image(prompt, output_image_path, reference_image_path=None, api_key=None, model=None, api_base_url=None, size=None):
     """调用千问 API 生成图像"""
     print(f"[*] Generating image with Qwen (model: {model})...")
 
@@ -178,11 +177,11 @@ def _qwen_generate_image(prompt, output_image_path, reference_image_path=None, a
     is_wanx_model = model and (model.startswith('wanx') or model.startswith('wan-'))
 
     if is_wanx_model:
-        return _qwen_wanx_generate(prompt, output_image_path, model, api_base_url, api_key)
+        return _qwen_wanx_generate(prompt, output_image_path, model, api_base_url, api_key, size)
     else:
-        return _qwen_image_generate(prompt, output_image_path, model, api_base_url, reference_image_path, api_key)
+        return _qwen_image_generate(prompt, output_image_path, model, api_base_url, reference_image_path, api_key, size)
 
-def generate_image(prompt, output_image_path, reference_image_path=None, provider=None):
+def generate_image(prompt, output_image_path, reference_image_path=None, provider=None, size=None):
     """调用图片生成 API 生成图像，支持 Gemini 和 千问（直接传入 prompt 字符串）"""
     config = load_config()
 
@@ -214,18 +213,20 @@ def generate_image(prompt, output_image_path, reference_image_path=None, provide
     api_base_url = provider_config.get("api_base_url", "")
 
     print(f"[*] Using model: {model}")
+    if size:
+        print(f"[*] Image size: {size}")
 
     if provider == "qwen":
-        return _qwen_generate_image(prompt, output_image_path, reference_image_path, api_key, model, api_base_url)
+        return _qwen_generate_image(prompt, output_image_path, reference_image_path, api_key, model, api_base_url, size)
     else:
         return _gemini_generate_image(prompt, output_image_path, reference_image_path, api_key, model)
 
-def remote_draw_trigger(prompt_path, output_image_path, reference_image_path=None, provider=None):
+def remote_draw_trigger(prompt_path, output_image_path, reference_image_path=None, provider=None, size=None):
     """调用图片生成 API 生成图像（从文件读取 prompt）"""
     print(f"[*] Reading prompt: {prompt_path}")
     with open(prompt_path, 'r', encoding='utf-8') as f:
         prompt = f.read()
-    return generate_image(prompt, output_image_path, reference_image_path, provider)
+    return generate_image(prompt, output_image_path, reference_image_path, provider, size)
 
 def _process_reference_image(image_data, output_path, target_size=512):
     """后处理 reference image：缩放到标准尺寸（512x512）"""

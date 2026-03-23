@@ -1,5 +1,6 @@
 import os
 import sys
+import glob as glob_module
 from datetime import datetime
 
 from modules.config import config_command
@@ -22,6 +23,80 @@ def create_dir(provider=None):
     out_dir_abs = os.path.abspath(full_path)
     print(out_dir_abs)
     return out_dir_abs
+
+def batch_draw(target_dir, provider=None, max_concurrent=3, delay_between=1.0):
+    """批量生成所有 anim_* 或 static_* 目录下的图片（并发执行）"""
+    import json
+    import concurrent.futures
+    import time
+
+    # 读取 params.json 获取 reference_image
+    params_path = os.path.join(target_dir, "params.json")
+    reference_image = None
+    if os.path.exists(params_path):
+        with open(params_path, 'r', encoding='utf-8') as f:
+            params = json.load(f)
+            ref = params.get("reference_image", "")
+            if ref and os.path.isfile(ref):
+                reference_image = ref
+
+    # 查找所有 anim_* 或 static_* 子目录
+    subdirs = sorted([
+        d for d in os.listdir(target_dir)
+        if os.path.isdir(os.path.join(target_dir, d)) and (d.startswith("anim_") or d.startswith("static_"))
+    ])
+
+    if not subdirs:
+        print(f"No anim_* or static_* directories found in {target_dir}")
+        return False
+
+    print(f"Found {len(subdirs)} directories to process (max_concurrent={max_concurrent})")
+
+    def process_single(subdir):
+        """处理单个子目录"""
+        subdir_path = os.path.join(target_dir, subdir)
+        prompt_path = os.path.join(subdir_path, "prompt.txt")
+        output_path = os.path.join(subdir_path, "original_grid.png")
+
+        if not os.path.exists(prompt_path):
+            return (subdir, None, "prompt.txt not found")
+
+        if os.path.exists(output_path):
+            return (subdir, True, "already exists, skipped")
+
+        if reference_image:
+            result = remote_draw_trigger(prompt_path, output_path, reference_image, provider=provider)
+        else:
+            result = remote_draw_trigger(prompt_path, output_path, provider=provider)
+
+        return (subdir, result, "success" if result else "failed")
+
+    results = []
+    success_count = 0
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_concurrent) as executor:
+        futures = {}
+        for i, subdir in enumerate(subdirs):
+            # 频率限制：每批之间加延迟
+            if i > 0 and i % max_concurrent == 0:
+                time.sleep(delay_between)
+
+            future = executor.submit(process_single, subdir)
+            futures[future] = subdir
+
+        for future in concurrent.futures.as_completed(futures):
+            subdir, result, message = future.result()
+            if result is True:
+                success_count += 1
+                print(f"[✓] {subdir}: {message}")
+            elif result is None:
+                print(f"[!] {subdir}: {message}")
+            else:
+                print(f"[✗] {subdir}: {message}")
+            results.append((subdir, result, message))
+
+    print(f"\n[✓] Batch draw complete: {success_count}/{len(subdirs)} succeeded")
+    return success_count == len(subdirs)
 
 def _parse_provider_arg(args):
     """从参数列表中解析 --provider 参数"""
@@ -47,6 +122,7 @@ if __name__ == "__main__":
         print("  python3 sticker_utils.py transform_photo <photo_path> <style_preset> <output_path> [additional_description]")
         print("  python3 sticker_utils.py draw_character <character_prompt> <style_preset> <output_path>")
         print("  python3 sticker_utils.py build_prompts <target_directory_path>")
+        print("  python3 sticker_utils.py batch_draw <target_directory_path> [--concurrent N] [--delay S]")
         print("  python3 sticker_utils.py draw <prompt.txt> <output_original_grid.png> [reference_image]")
         print("  python3 sticker_utils.py draw_with_ref <prompt.txt> <output.png> <reference_image>")
         print("  python3 sticker_utils.py process <target_directory_path>")
@@ -89,6 +165,19 @@ if __name__ == "__main__":
         draw_character_reference(prompt, remaining_argv[3], provider=provider_arg)
     elif cmd == "build_prompts":
         build_prompts_workspace(remaining_argv[1])
+    elif cmd == "batch_draw":
+        if len(remaining_argv) < 2:
+            print("Usage: python3 sticker_utils.py batch_draw <target_directory_path> [--provider gemini|qwen] [--concurrent N] [--delay S]")
+            sys.exit(1)
+        # 解析额外参数
+        max_concurrent = 3
+        delay_between = 1.0
+        for i, arg in enumerate(remaining_argv):
+            if arg == "--concurrent" and i + 1 < len(remaining_argv):
+                max_concurrent = int(remaining_argv[i + 1])
+            elif arg == "--delay" and i + 1 < len(remaining_argv):
+                delay_between = float(remaining_argv[i + 1])
+        batch_draw(remaining_argv[1], provider=provider_arg, max_concurrent=max_concurrent, delay_between=delay_between)
     elif cmd == "draw":
         if len(remaining_argv) < 3:
             print("Usage: python3 sticker_utils.py draw <prompt.txt> <output.png> [reference_image] [--provider gemini|qwen]")

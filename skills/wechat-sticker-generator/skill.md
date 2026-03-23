@@ -12,7 +12,7 @@ description: 一键生成符合微信规范的动态(GIF)及静态(PNG)系列表
 **核心能力：**
 
 - 🎨 **12种预设画风** — 从二次元到3D黏土，像素风到水墨国风
-- 🎭 **7大场景主题** — 日常、职场、恋爱、节日、情绪、游戏、学习
+- 🎭 **10大场景主题** — 综合、节日、恋爱、问候、职场、学习、游戏、萌宠、美食、运动
 - 👤 **灵活角色系统** — 支持原创角色、知名IP、真人Q版化
 - 📸 **真人照片转Q版** — 上传照片→自动转换→生成表情包（保留真人特征）
 - 🔒 **角色一致性锁定** — 通过参考图保证多套件角色长相统一
@@ -69,7 +69,7 @@ python3 sticker_utils.py config
 
 ### 2.4 背景去除依赖（可选但推荐）
 
-当 `background_type` 设为 `transparent` 时，`process` 阶段会自动执行去背景。默认优先走本地模型 `rembg`（推荐 `isnet-general-use`）。
+当 `background_type` 设为 `transparent` 时，`process` 阶段会自动执行去背景。默认使用本地模型 `rembg`（默认模型 `isnet-anime`，适合动漫风格）。
 
 ```bash
 # 推荐安装
@@ -89,9 +89,11 @@ pip install onnxruntime
   "set_name": "打工人龙虾",
   "set_description": "一只每天为了KPI奋斗的Q版龙虾，完美演绎职场辛酸与欢乐！",
   "copyright_info": "OpenClaw 2026",
+  "character_name": "虾虾",
   "character_prompt": "角色的外观长相详细设定（只描述外观，不要写动作）",
   "reference_image": "【可选】参考图路径，用于锁定角色长相",
   "style_preset": "2D_KAWAII",
+  "custom_style": "【可选】自定义风格描述，仅当 style_preset 为 CUSTOM 时生效",
   "scene_theme": "WORKPLACE",
   "character_type": "HUMAN_CHIBI",
   "color_mood": "BRIGHT_VIBRANT",
@@ -99,6 +101,10 @@ pip install onnxruntime
   "enable_bg_removal": true,
   "bg_removal_method": "dual",
   "bg_removal_model": "isnet-anime",
+  "bg_removal_script_path": "【可选】自定义去背景脚本路径",
+  "bg_alpha_matting": true,
+  "bg_sharpen_edges": false,
+  "bg_sharpen_threshold": 200,
   "grid_size": 9,
   "expressions": [
     {
@@ -182,7 +188,9 @@ pip install onnxruntime
 | `MEME_STYLE`    | 表情包网红风，魔性夸张           | 搞笑、网络流行   |
 | `CUSTOM`        | 自定义风格（需填写custom_style） | 特殊需求         |
 
-### 3.2 场景主题 (scene_theme) 【直接映射微信官方后台使用场景表】
+### 3.2 场景主题 (scene_theme) 【可自由发挥或参考预设】
+
+用户可以**自由发挥**描述任意场景，系统会根据场景自动生成合适的表情配文。以下预设场景可直接映射到微信后台：
 
 | 选项            | 微信后台对应勾选          | 适用场景及配文参考                |
 | --------------- | ------------------------- | --------------------------------- |
@@ -196,6 +204,8 @@ pip install onnxruntime
 | `PETS`          | **动物萌宠**              | 萌喵、傻犬相关专属                |
 | `FOOD`          | **饮食吃饭**              | 喝奶茶、饿了、大餐                |
 | `SPORTS`        | **运动健身**              | 冲刺、流汗、去健身                |
+
+> **💡 提示**：场景主题不限于此表，用户可自由描述想要的场景（如"熬夜党"、"咸鱼躺平"、"吃货日常"等），AI 会智能生成对应的表情动作和配文。
 
 ### 3.3 角色类型 (character_type)
 
@@ -262,15 +272,7 @@ pip install onnxruntime
 
 ### 用户请求
 
-> "帮我做一套打工人表情包，角色是一个秃头程序员大叔，要3个动态的，搞笑一点"
-
-### Agent 推理过程
-
-1. **识别需求**：用户要表情包 → 触发本 Skill
-2. **模式选择**：要"动态"→ `mode: "animated"`
-3. **角色设定**：秃头程序员大叔 → `character_type: "HUMAN_CHIBI"`
-4. **风格选择**：搞笑打工人 → `style_preset: "MEME_STYLE"` + `scene_theme: "WORKPLACE"`
-5. **动作构思**：职场搞笑场景，需要夸张动作
+> "帮我做一套打工人表情包，角色是一个秃头程序员大叔，要动态的，搞笑一点"
 
 ### 最终 params.json
 
@@ -280,80 +282,79 @@ pip install onnxruntime
   "set_name": "秃头小猿",
   "set_description": "每天修Bug、抗击KPI的卑微打工人日常，虽然头秃但依然坚强！",
   "copyright_info": "李强制作",
+  "character_name": "秃头猿",
   "character_prompt": "一个中年秃头程序员大叔，圆脸，稀疏的头发，戴厚底黑框眼镜，穿着皱巴巴的格子衬衫，黑眼圈很重，一脸疲惫但眼神呆萌",
   "reference_image": "",
   "style_preset": "MEME_STYLE",
+  "custom_style": "",
   "scene_theme": "WORKPLACE",
   "character_type": "HUMAN_CHIBI",
   "color_mood": "BRIGHT_VIBRANT",
   "background_type": "transparent",
+  "enable_bg_removal": true,
+  "bg_removal_method": "dual",
+  "bg_removal_model": "isnet-anime",
+  "bg_removal_script_path": "",
+  "bg_alpha_matting": true,
+  "bg_sharpen_edges": false,
+  "bg_sharpen_threshold": 200,
+  "grid_size": 9,
   "expressions": [
-    // 【💡 提示】微信完整表情包专辑需要 16 或 24 张，因此智能体需为主体设计 24 个不同动作！这会让静态拆作 3 个静态网格（static_01~03），动态拆作 24 个（anim_01~24）。
-    // 以下由于文档篇幅限制仅展示3项：
-    {
-      "action": "疯狂敲键盘到手指冒烟，眼睛瞪得像铜铃，整个人变成残影，最后累趴在键盘上流口水",
-      "text": "996!"
-    },
-    {
-      "action": "看到代码报错，整个人石化碎裂成渣，眼珠子弹出来，嘴巴张大到能塞下一个拳头",
-      "text": "寄!"
-    },
-    {
-      "action": "下班时间一到，瞬间变身火箭冲出办公室，留下一道残影和漫天飞舞的文档",
-      "text": "润了!"
-    }
+    {"action": "疯狂敲键盘到手指冒烟，眼睛瞪得像铜铃，整个人变成残影", "text": "搬砖"},
+    {"action": "看到代码报错，整个人石化碎裂成渣，眼珠子弹出来", "text": "寄!"},
+    {"action": "下班时间一到，瞬间变身火箭冲出办公室，留下一道残影", "text": "润了"},
+    {"action": "收到甲方需求，整个人瘫倒在桌上，眼睛变成死鱼眼", "text": "好累"},
+    {"action": "开会被点名，满头大汗，两只手不知道往哪放", "text": "慌了"},
+    {"action": "摸鱼被抓包，表情僵硬，嘴角抽搐，冷汗直流", "text": "完了"},
+    {"action": "看到工资条，眼睛变成金钱符号，整个人飘起来", "text": "真香"},
+    {"action": "老板走近工位，立刻切换屏幕，假装认真工作", "text": "装忙"},
+    {"action": "项目上线成功，双手比V，跳起来庆祝，周围飘彩带", "text": "成了"}
   ]
 }
 ```
 
-### 执行命令序列
-
-```bash
-# Step 1: 创建工作空间（可选 --provider 指定提供商，目录名会自动带上后缀）
-DIR_PATH=$(python3 sticker_utils.py create_dir --provider gemini)
-# 输出: /path/to/output/20260321_120000_gemini
-
-# Step 2: 写入 params.json 到 $DIR_PATH/params.json
-
-# Step 3: 解析生成提示词
-python3 sticker_utils.py build_prompts $DIR_PATH
-
-# Step 4: 循环批量生图（示例假设只有3项；实际完整的24个则需利用 for 循环全部跑完 anim_01 到 anim_24；静态模式下则是 static_01 到 static_03）
-python3 sticker_utils.py draw $DIR_PATH/anim_01/prompt.txt $DIR_PATH/anim_01/original_grid.png --provider gemini
-python3 sticker_utils.py draw $DIR_PATH/anim_02/prompt.txt $DIR_PATH/anim_02/original_grid.png --provider gemini
-python3 sticker_utils.py draw $DIR_PATH/anim_03/prompt.txt $DIR_PATH/anim_03/original_grid.png --provider gemini
-
-# Step 5: 切片合成
-python3 sticker_utils.py process $DIR_PATH
-
-# Step 6: AI 补充微信物料（Banner / Cover / 介绍文案）
-# 所有信息均从 $DIR_PATH/params.json 动态读取，无需手动传入角色名或场景
-python3 sticker_utils.py wechat_meta $DIR_PATH
-```
+> **💡 提示**：
+> - **静态模式 (static)**：每个九宫格包含 **9 个静态表情**。`expressions` 数组必须填写 **9 个元素**。微信专辑需要 16~24 张，因此需要 **3 个九宫格**（共 27 张表情）。
+> - **动态模式 (animated)**：每个九宫格是 **9 帧动画**，合成 **1 个 GIF**。`expressions` 数组必须填写 **9 个元素**。微信专辑需要 16~24 个 GIF，因此需要 **24 个九宫格**（共 24 个 GIF）。
+> - 以上示例仅展示 3 个 expression 作为演示，实际执行时必须补全到 9 个！
 
 ### 预期产出
 
+**静态模式 (static) - 24张表情 = 3个九宫格：**
 ```
 output/20260321_120000_gemini/
 ├── params.json
-├── anim_01/
+├── static_01/                     ← 第1个九宫格（9张静态表情）
 │   ├── original_grid.png
-│   ├── original_grid_nobg.png   ← 去背景开启时：切片前的整图
-│   ├── prompt.txt
-│   ├── origin/                  ← 必有：原图裁剪 `sticker_01~09.png` +（动图）`animated_sticker.gif`
-│   └── nobg/                    ← 仅去背景成功时：透明套，同上文件名
-├── anim_02/
+│   ├── origin/                    ← sticker_01~09.png
+│   └── nobg/                      ← 透明背景版
+├── static_02/                     ← 第2个九宫格（9张静态表情）
 │   └── …
-├── anim_03/
+├── static_03/                     ← 第3个九宫格（9张静态表情）
 │   └── …
-├── wechat_export/               ← 🎁 最终直接用于微信平台提交的合规材料包！
-│   ├── main/                    ← 240x240 主图 (编号 01~24, GIF或PNG)
-│   ├── thumb/                   ← 120x120 缩略图 (编号 01~24, PNG)
-│   ├── cover.png                ← 240x240 表情主页面封面图
-│   ├── icon.png                 ← 50x50 聊天窗口面板入口图标
-│   └── banner.png               ← 750x400 顶部详情页横幅展示图
-└── …
-└── …
+└── wechat_export/
+    ├── main/                      ← 01~24.png (240x240)
+    └── thumb/                     ← 01~24.png (120x120)
+```
+
+**动态模式 (animated) - 24个GIF = 24个九宫格：**
+```
+output/20260321_120000_gemini/
+├── params.json
+├── anim_01/                       ← 第1个GIF（9帧动画）
+│   ├── original_grid.png
+│   ├── origin/
+│   │   ├── sticker_01~09.png
+│   │   └── animated_sticker.gif   ← 9帧合成的GIF
+│   └── nobg/
+├── anim_02/                       ← 第2个GIF
+│   └── …
+├── ... (共24个anim_XX目录)
+├── anim_24/                       ← 第24个GIF
+│   └── …
+└── wechat_export/
+    ├── main/                      ← 01~24.gif (240x240)
+    └── thumb/                     ← 01~24.png (120x120)
 ```
 
 ---
@@ -375,50 +376,6 @@ output/20260321_120000_gemini/
 #### 用户请求示例
 
 > "用我这张照片，帮我做一套可爱的表情包，要那种Q版的，3个动图"
-
-#### Agent 执行步骤
-
-```bash
-# ========== 第一步：创建工作空间 ==========
-DIR_PATH=$(python3 sticker_utils.py create_dir --provider gemini)
-
-# ========== 第二步：照片转Q版定妆图 ==========
-# 用户提供的照片路径
-USER_PHOTO="/path/to/user_photo.jpg"
-
-# 转换为Q版定妆图（核心步骤！）
-python3 sticker_utils.py transform_photo "$USER_PHOTO" "2D_KAWAII" "$DIR_PATH/base_reference.png" "戴眼镜，短头发"
-
-# 输出: base_reference.png - 这张图就是用户的Q版形象
-
-# ========== 第三步：写入 params.json ==========
-# reference_image 填入刚才生成的 base_reference.png 路径
-cat > "$DIR_PATH/params.json" << 'EOF'
-{
-  "mode": "animated",
-  "character_prompt": "基于用户照片的Q版角色",
-  "reference_image": "/path/to/output/xxx/base_reference.png",
-  "style_preset": "2D_KAWAII",
-  "expressions": [
-    {"action": "开心地跳起来双手比心，整个人变成粉色爱心包围", "text": "爱你!"},
-    {"action": "趴在桌子上哭成泪人，眼泪汇成河流", "text": "太难了"},
-    {"action": "举着奶茶狂奔，眼睛变成星星状", "text": "续命!"}
-  ]
-}
-EOF
-
-# ========== 第四步：解析裂变 ==========
-python3 sticker_utils.py build_prompts $DIR_PATH
-
-# ========== 第五步：带参考图生成 ==========
-# 注意：这里使用 draw_with_ref 命令，传入参考图！
-python3 sticker_utils.py draw_with_ref $DIR_PATH/anim_01/prompt.txt $DIR_PATH/anim_01/original_grid.png $DIR_PATH/base_reference.png
-python3 sticker_utils.py draw_with_ref $DIR_PATH/anim_02/prompt.txt $DIR_PATH/anim_02/original_grid.png $DIR_PATH/base_reference.png
-python3 sticker_utils.py draw_with_ref $DIR_PATH/anim_03/prompt.txt $DIR_PATH/anim_03/original_grid.png $DIR_PATH/base_reference.png
-
-# ========== 第六步：切片封包 ==========
-python3 sticker_utils.py process $DIR_PATH
-```
 
 ### transform_photo 命令详解
 
@@ -492,6 +449,43 @@ Gemini 会自动进行以下处理：
 
 ## 7. 智能体执行流程 (Execution Workflow)
 
+### 【第零步】用户需求收集（必须询问）
+
+**⚠️ 在开始任何操作前，必须向用户确认以下信息：**
+
+| 需要询问的信息 | 是否必填 | 说明 |
+|---------------|---------|------|
+| **参考图** | 可选 | 用户提供的角色外观参考图（任意风格均可） |
+| **角色名称** | 可选 | 角色的名字，用于表情包命名和文案生成 |
+| **风格** | 推荐 | 从 12 种预设风格中选择（见 §3.1 风格预设） |
+| **场景主题** | 推荐 | 从 10 大场景主题中选择（见 §3.2 场景主题） |
+| **场景数量** | 推荐 | 默认 24 个表情（3个九宫格），可自定义 |
+
+**询问话术示例：**
+> "在开始生成表情包之前，请告诉我以下信息：
+> 1. **参考图**：有角色参考图吗？（如有请提供，没有也可以纯文字描述）
+> 2. **角色名称**：角色叫什么名字？（不提供则自动生成）
+> 3. **风格**：选择哪种画风？（水墨风、像素风、水彩风、二次元可爱风等，共12种可选）
+> 4. **场景主题**：想要什么场景？（可自由发挥，如职场打工、恋爱、游戏电竞等；也可参考预设的10种场景）
+> 5. **数量**：需要多少个表情？
+>    - **静态模式**：每个九宫格=9张表情，24张需要3个九宫格（3次生成）
+>    - **动态模式**：每个九宫格=1个GIF，24个GIF需要24个九宫格（24次生成）
+>    - 默认24个表情符合微信专辑规范，也可以只生成9个单场景"
+
+**处理逻辑：**
+- **用户提供了参考图** → 用于 AI 生成定妆图时参考角色外观
+- **用户未提供参考图** → 使用纯文字描述文生图，角色外观由 AI 自由创作
+- **用户提供了角色名称** → 用于 `character_name` 字段
+- **用户未提供角色名称** → 根据场景主题自动生成合适的角色名称
+- **用户未指定风格** → 默认使用 `2D_KAWAII`（日系二次元可爱风）
+- **用户自定义场景** → 自由发挥，AI 会根据场景描述生成配文和动作
+- **用户未指定场景** → 默认使用 `COMPREHENSIVE`（综合场景）
+- **用户未指定数量** → 默认生成 24 个表情：
+  - **静态模式**：3 个九宫格（3 次生成，共 27 张表情）
+  - **动态模式**：24 个九宫格（24 次生成，共 24 个 GIF）
+
+---
+
 ### 【第一步】沙盒建站
 
 在启动流水线之前，必须先创建一个隔离的工作站目录。
@@ -502,21 +496,34 @@ DIR_PATH=$(python3 sticker_utils.py create_dir --provider gemini)
 
 ### 【第二步】角色定妆与入驻（统一生成标准基准图）
 
-**⚠️ 核心定律：所有表情包的生成，必须依赖一张绝对中立、没有夸张动作的“定妆图” (`base_reference.png`)。决不允许把夸张动作写进定妆步骤！**
+**⚠️ 核心定律：所有表情包的生成，必须依赖一张绝对中立、没有夸张动作的”定妆图” (`base_reference.png`)。决不允许把夸张动作写进定妆步骤！**
+
+**⚠️ 重要：定妆图必须由 AI 生成，不能直接复制用户的原图！用户提供的参考图仅供 AI 参考角色外观，最终定妆图需要 AI 统一生成标准格式（纯白背景、正面姿势、无夸张动作）。**
+
 用户的原始照片及生成的定妆图，**必须都存放于 `$DIR_PATH` 目录下**。
 
-**情况 A：无图生成**
+**情况 A：无图生成（纯文字描述）**
 ```bash
-python3 sticker_utils.py draw_character "角色的外观描述..." "2D_KAWAII" "$DIR_PATH/base_reference.png"
+python3 sticker_utils.py draw_character “角色的外观描述...” “2D_KAWAII” “$DIR_PATH/base_reference.png”
 ```
 
-**情况 B：有复杂原图（如真人照片）转换**
+**情况 B：有参考图（卡通/插画角色）**
+用户提供了卡通角色参考图，需要根据参考图生成标准化定妆图：
+```bash
+# 先复制参考图到工作目录
+cp /path/to/user/reference.png $DIR_PATH/user_reference.png
+# 根据参考图描述生成定妆图（不要复制原图！）
+python3 sticker_utils.py draw_character “基于参考图的角色外观描述，保持相同风格和特征” “2D_KAWAII” “$DIR_PATH/base_reference.png”
+```
+
+**情况 C：真人照片转Q版**
 ```bash
 cp /path/to/user/photo.jpg $DIR_PATH/user_original_photo.jpg
-python3 sticker_utils.py transform_photo "$DIR_PATH/user_original_photo.jpg" "MEME_STYLE" "$DIR_PATH/base_reference.png" "保持角色外观特征不变，纯白背景正面半身像。绝对不要有任何夸张动作。"
+python3 sticker_utils.py transform_photo “$DIR_PATH/user_original_photo.jpg” “MEME_STYLE” “$DIR_PATH/base_reference.png” “保持角色外观特征不变，纯白背景正面半身像。绝对不要有任何夸张动作。”
 ```
 
-**情况 C：已有完美的白底标准定妆图**
+**情况 D：已有完美的白底标准定妆图（极少见）**
+只有在用户提供的图片已经是完美的白底、正面、无动作的标准定妆图时，才可直接复制：
 ```bash
 cp /path/to/perfect/reference.png $DIR_PATH/base_reference.png
 ```
@@ -528,6 +535,38 @@ cp /path/to/perfect/reference.png $DIR_PATH/base_reference.png
 将组装好的 JSON 写入 `$DIR_PATH/params.json`。
 **确保 `reference_image` 字段已填入第二步中准备好的 `$DIR_PATH/base_reference.png`！**
 
+```bash
+cat > "$DIR_PATH/params.json" << 'EOF'
+{
+  "mode": "animated",
+  "set_name": "表情包名称",
+  "set_description": "表情包描述（不超过80字）",
+  "copyright_info": "版权信息",
+  "character_name": "角色名称",
+  "character_prompt": "角色外观描述（只写外观，不写动作）",
+  "reference_image": "$DIR_PATH/base_reference.png",
+  "style_preset": "2D_KAWAII",
+  "custom_style": "",
+  "scene_theme": "COMPREHENSIVE",
+  "character_type": "HUMAN_CHIBI",
+  "color_mood": "BRIGHT_VIBRANT",
+  "background_type": "transparent",
+  "enable_bg_removal": true,
+  "bg_removal_method": "dual",
+  "bg_removal_model": "isnet-anime",
+  "bg_removal_script_path": "",
+  "bg_alpha_matting": true,
+  "bg_sharpen_edges": false,
+  "bg_sharpen_threshold": 200,
+  "grid_size": 9,
+  "expressions": [
+    {"action": "动作描述1", "text": "配文1"},
+    {"action": "动作描述2", "text": "配文2"}
+  ]
+}
+EOF
+```
+
 ### 【第四步】解析裂变（配置转 Prompt）
 
 为每个表情动作创建独立的生成子目录和 Prompt 文件：
@@ -537,15 +576,16 @@ python3 sticker_utils.py build_prompts $DIR_PATH
 
 ### 【第五步】批量生图（AI 出九宫格原图）
 
-使用循环遍历所有 `anim_*` 或 `static_*` 目录生成大网格图（绝不做裁切或抠图）。
+**一条命令自动处理所有 `anim_*` 或 `static_*` 目录，无需手动循环。默认顺序执行（并发数=1），确保角色一致性。**
 
 ```bash
-# 情况A：完全没有提供任何基准参考图，自由生成
-python3 sticker_utils.py draw $DIR_PATH/anim_01/prompt.txt $DIR_PATH/anim_01/original_grid.png
+# 自动检测是否有 reference_image，顺序生成（推荐，保证角色一致）
+python3 sticker_utils.py batch_draw $DIR_PATH
 
-# 情况B：带有 reference_image 基准图
-python3 sticker_utils.py draw_with_ref $DIR_PATH/anim_01/prompt.txt $DIR_PATH/anim_01/original_grid.png $DIR_PATH/base_reference.png
+# 可选：并发执行（可能影响角色一致性，慎用）
+python3 sticker_utils.py batch_draw $DIR_PATH --concurrent 2 --delay 3.0
 ```
+
 > **可插拔调试提示**：若目录下已存在人工放入的 `original_grid.png`，可直接跳过此步！
 
 ### 【第六步】去背景与切片（生成最终贴纸和 GIF）
@@ -559,7 +599,8 @@ python3 sticker_utils.py process $DIR_PATH
 
 ### 【第七步】AI 补充微信物料（Banner / Cover / 介绍文案）
 
-自动生成 `wechat_export/` 目录所需的封面和文案材料。
+**⚠️ 此步骤必须执行，不可跳过！** `process` 命令生成的 `wechat_export/` 中的 banner.png 和 cover.png 只是占位图，必须通过本步骤用 AI 重新生成高质量宣传图。
+
 ```bash
 python3 sticker_utils.py wechat_meta $DIR_PATH
 ```
