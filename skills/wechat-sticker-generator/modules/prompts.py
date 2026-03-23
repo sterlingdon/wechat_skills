@@ -9,21 +9,30 @@ from modules.constants import (
     CHARACTER_TYPE_HINTS,
     COLOR_MOOD_MAPPING,
     BACKGROUND_TYPE_MAPPING,
-    NEGATIVE_PROMPT
+    NEGATIVE_PROMPT,
+    GRID_CONFIG,
+    DEFAULT_GRID_SIZE,
 )
 
-def build_static_prompt(character, style_desc, expressions, reference_image="", background_type="transparent"):
+def build_static_prompt(character, style_desc, expressions, reference_image="", background_type="transparent", grid_size=None):
+    grid_size = grid_size or DEFAULT_GRID_SIZE
+    config = GRID_CONFIG.get(grid_size, GRID_CONFIG[DEFAULT_GRID_SIZE])
+    rows = config["rows"]
+    cols = config["cols"]
+    total_frames = config["total_frames"]
+    layout_desc = config["layout_desc"]
+    
     background_desc = BACKGROUND_TYPE_MAPPING.get(background_type, BACKGROUND_TYPE_MAPPING["transparent"])
     prompt_lines = [
-        "A character sticker sheet featuring exactly 9 different expressions arranged in a 3x3 layout on a single seamless canvas. Do NOT draw any grid lines.",
+        f"A character sticker sheet featuring exactly {total_frames} different expressions arranged in a {layout_desc} on a single seamless canvas. Do NOT draw any grid lines.",
         "",
-        "CRITICAL: You MUST draw exactly 9 (NINE) character poses in this single image, arranged in a 3x3 grid. Each cell contains one sticker with a different expression.",
+        f"CRITICAL: You MUST draw exactly {total_frames} ({['NINE', 'SIXTEEN'][grid_size == 16]}) character poses in this single image, arranged in a {layout_desc}. Each cell contains one sticker with a different expression.",
         "",
         f"Character: {character}",
         f"Art Style: {style_desc}",
         "",
         "=== CRITICAL LAYOUT REQUIREMENTS ===",
-        "1. CANVAS: Perfect square (1:1 aspect ratio, 1024x1024 pixels total), logically divided into 3x3=9 equal areas, but visually completely seamless.",
+        f"1. CANVAS: Perfect square (1:1 aspect ratio, 1024x1024 pixels total), logically divided into {layout_desc}={total_frames} equal areas, but visually completely seamless.",
         "2. SCENE ALIGNMENT: Each area is a separate camera view. The character should be naturally framed within its area. Do NOT rigidly force the character to the exact mathematical center if the pose (e.g., sitting vs standing) dictates otherwise. Keep a consistent baseline floor.",
         "3. SIZE: Character (including all limbs, hair, accessories) must stay within 70% of each area, leaving at least 15% safe margin on ALL FOUR sides to prevent cutting off during slicing.",
         "4. NO OVERLAP: Absolutely no character parts, hair, limbs, shadows, or text may cross into adjacent areas. Each area is completely independent.",
@@ -32,12 +41,12 @@ def build_static_prompt(character, style_desc, expressions, reference_image="", 
         f"Background: {background_desc}",
     ]
     if reference_image:
-        prompt_lines.append(f"Character Reference: Use the provided reference image to accurately draw the exact same character (same shape, colors, features, and overall design) across all 9 frames.")
+        prompt_lines.append(f"Character Reference: Use the provided reference image to accurately draw the exact same character (same shape, colors, features, and overall design) across all {total_frames} frames.")
 
     prompt_lines.append("")
-    prompt_lines.append("=== EXPRESSIONS (3 rows × 3 columns, each centered in its cell) ===")
+    prompt_lines.append(f"=== EXPRESSIONS ({rows} rows × {cols} columns, each centered in its cell) ===")
     for i, exp in enumerate(expressions):
-        if i >= 9: break
+        if i >= total_frames: break
         t = exp.get('text', '')
         if not t.strip(): t = "WOW!"
         prompt_lines.append(f"Cell {i+1}: Action: {exp.get('action', '')}. Text overlay: \"{t}\" - use highly creative typography matching the emotion. Pick vibrant text colors and distinct bold outlines. TEXT GROUPING: Keep all letters tightly grouped together as a single block without scattering. Position it playfully inside this cell's boundaries without cutting off.")
@@ -48,40 +57,47 @@ def build_static_prompt(character, style_desc, expressions, reference_image="", 
 
     return "\n".join(prompt_lines)
 
-def build_animated_prompt(character, style_desc, action, text_overlay, reference_image="", background_type="transparent"):
+def build_animated_prompt(character, style_desc, action, text_overlay, reference_image="", background_type="transparent", grid_size=None):
+    grid_size = grid_size or DEFAULT_GRID_SIZE
+    config = GRID_CONFIG.get(grid_size, GRID_CONFIG[DEFAULT_GRID_SIZE])
+    rows = config["rows"]
+    cols = config["cols"]
+    total_frames = config["total_frames"]
+    layout_desc = config["layout_desc"]
+    
     background_desc = BACKGROUND_TYPE_MAPPING.get(background_type, BACKGROUND_TYPE_MAPPING["transparent"])
     if not text_overlay or not str(text_overlay).strip():
         text_overlay = f"{str(action).split()[0].upper()}!"
 
     prompt_lines = [
-        "A 9-frame animation sprite sheet arranged in 3 rows and 3 columns on a single seamless canvas. Do NOT draw any grid lines.",
+        f"A {total_frames}-frame animation sprite sheet arranged in {rows} rows and {cols} columns on a single seamless canvas. Do NOT draw any grid lines.",
         "",
-        "CRITICAL: You MUST draw exactly 9 (NINE) character poses in this single image, arranged in a 3x3 grid. Each cell contains one frame of the animation.",
+        f"CRITICAL: You MUST draw exactly {total_frames} ({['NINE', 'SIXTEEN'][grid_size == 16]}) character poses in this single image, arranged in a {layout_desc}. Each cell contains one frame of the animation.",
         "",
-        "IMPORTANT: These 9 frames will be sliced and played sequentially as a GIF animation. Each frame MUST show the character at a DIFFERENT moment of the action, with progressive changes. Do NOT draw 9 identical poses - each frame should advance the animation slightly.",
+        f"IMPORTANT: These {total_frames} frames will be sliced and played sequentially as a GIF animation. Each frame MUST show the character at a DIFFERENT moment of the action, with progressive changes. Do NOT draw {total_frames} identical poses - each frame should advance the animation slightly.",
         "",
         f"Character: {character}",
         f"Art Style: {style_desc}",
-        f"Animation: A smooth 9-frame sequence of '{action}'.",
+        f"Animation: A smooth {total_frames}-frame sequence of '{action}'.",
         "",
         "=== CRITICAL LAYOUT REQUIREMENTS ===",
-        "1. CANVAS: Perfect square (1:1 aspect ratio, 1024x1024 pixels total), logically divided into exactly 3x3=9 equal areas, but visually completely seamless.",
+        f"1. CANVAS: Perfect square (1:1 aspect ratio, 1024x1024 pixels total), logically divided into exactly {layout_desc}={total_frames} equal areas, but visually completely seamless.",
         "2. ANIMATION SPACE: Treat each area as a consistent fixed camera framing a fixed ground plane. The character must move NATURALLY within this space.",
         "3. NATURAL VERTICAL MOVEMENT: Crucially, if the action involves jumping, flying, or raising up, the character's body MUST be drawn physically higher within that specific frame's area compared to a standing frame. Do NOT artificially lock the character's center of mass to the center of every frame, otherwise the animation will not show vertical displacement.",
         "4. SIZE LIMIT: Character (including all limbs, hair, accessories, and motion effects) must stay within 70% of each area. This means at least 15% empty background margin on ALL FOUR sides of every area.",
         "5. NO OVERLAP: No character parts, hair, limbs, shadows, text, or motion lines may cross the invisible boundary into adjacent areas.",
         "6. ABSOLUTELY NO BORDERS: No visible borders, frames, grid lines, dividers, or dividing boxes between frames. The sequence must be drawn on a single, uninterrupted, perfectly clean background.",
-        "7. CONSISTENT BASELINE: Maintain a consistent imaginary floor level across all 9 areas, so physical movements look correct when the frames are played sequentially as a GIF.",
+        f"7. CONSISTENT BASELINE: Maintain a consistent imaginary floor level across all {total_frames} areas, so physical movements look correct when the frames are played sequentially as a GIF.",
         "",
         f"Background: {background_desc}",
         "",
         f"=== TEXT REQUIREMENT (MANDATORY) ===",
         f"Text content: \"{text_overlay}\"",
         "",
-        "CRITICAL: You MUST draw this text in EVERY SINGLE ONE of the 9 frames. This is a sticker, and text is essential.",
+        f"CRITICAL: You MUST draw this text in EVERY SINGLE ONE of the {total_frames} frames. This is a sticker, and text is essential.",
         "",
         "Text styling requirements:",
-        "- Draw the text in ALL 9 frames without exception",
+        f"- Draw the text in ALL {total_frames} frames without exception",
         "- Use highly creative, dynamic typography that perfectly matches the emotion and action of the character",
         "- TEXT COLOR & VARIATION: Vary the font color, style, size, tilt, and weight (e.g., jagged for screaming, bouncy for happy) across the frames to create a natural bouncy animation effect",
         "- Ensure text colors and bold outlines are vibrant and readable",
@@ -235,9 +251,11 @@ def build_prompts_workspace(target_dir):
     character_type = data.get("character_type", "")
     color_mood = data.get("color_mood", "BRIGHT_VIBRANT")
     reference_image = data.get("reference_image", "")
-    background_type = data.get("background_type", "transparent")  # 默认透明背景（微信要求）
+    background_type = data.get("background_type", "transparent")
+    grid_size = data.get("grid_size", DEFAULT_GRID_SIZE)
 
-    # 归档安全：复制外界基底图到本次发包环境内（如果已在 target_dir 内则跳过）
+    grid_config = GRID_CONFIG.get(grid_size, GRID_CONFIG[DEFAULT_GRID_SIZE])
+
     if reference_image and os.path.isfile(reference_image):
         ref_abs_path = os.path.abspath(reference_image)
         target_dir_abs = os.path.abspath(target_dir)
@@ -266,12 +284,12 @@ def build_prompts_workspace(target_dir):
         style_desc += f", {COLOR_MOOD_MAPPING[color_mood]}"
 
     if mode == "static":
-        chunk_size = 9
+        chunk_size = grid_config["chunk_size"]
         chunks = [expressions[i:i + chunk_size] for i in range(0, len(expressions), chunk_size)]
         for i, chunk in enumerate(chunks):
             sub_dir = os.path.join(target_dir, f"static_{i+1:02d}")
             os.makedirs(sub_dir, exist_ok=True)
-            prompt_text = build_static_prompt(character, style_desc, chunk, reference_image, background_type)
+            prompt_text = build_static_prompt(character, style_desc, chunk, reference_image, background_type, grid_size)
             with open(os.path.join(sub_dir, "prompt.txt"), "w", encoding="utf-8") as f:
                 f.write(prompt_text)
     else:
@@ -280,9 +298,9 @@ def build_prompts_workspace(target_dir):
             os.makedirs(sub_dir, exist_ok=True)
             action = exp.get("action", "")
             text_overlay = exp.get("text", "")
-            prompt_text = build_animated_prompt(character, style_desc, action, text_overlay, reference_image, background_type)
+            prompt_text = build_animated_prompt(character, style_desc, action, text_overlay, reference_image, background_type, grid_size)
             with open(os.path.join(sub_dir, "prompt.txt"), "w", encoding="utf-8") as f:
                 f.write(prompt_text)
 
-    print(f"Prompts successfully generated inside {target_dir}")
+    print(f"Prompts successfully generated inside {target_dir} (grid_size={grid_size})")
     return target_dir

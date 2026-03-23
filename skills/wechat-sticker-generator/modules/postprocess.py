@@ -5,32 +5,29 @@ import shutil
 from PIL import Image
 
 from modules.background import apply_background_removal
+from modules.constants import GRID_CONFIG, DEFAULT_GRID_SIZE
 
 def _resolve_bg_processing_config(target_dir):
     params_path = os.path.join(target_dir, "params.json")
+    default_config = {
+        "enabled": False,
+        "method": "rembg",
+        "model": "isnet-anime",
+        "alpha_matting": True,
+        "sharpen_edges": False,
+        "sharpen_threshold": 200,
+        "grid_size": DEFAULT_GRID_SIZE,
+    }
+    
     if not os.path.exists(params_path):
-        return {
-            "enabled": False,
-            "method": "rembg",
-            "model": "isnet-anime",
-            "alpha_matting": True,
-            "sharpen_edges": False,
-            "sharpen_threshold": 200,
-        }
+        return default_config
 
     try:
         with open(params_path, "r", encoding="utf-8") as f:
             params = json.load(f)
     except Exception as e:
         print(f"[!] Failed to parse params.json: {e}", file=sys.stderr)
-        return {
-            "enabled": False,
-            "method": "rembg",
-            "model": "isnet-anime",
-            "alpha_matting": True,
-            "sharpen_edges": False,
-            "sharpen_threshold": 200,
-        }
+        return default_config
 
     background_type = params.get("background_type", "transparent")
     enabled = params.get("enable_bg_removal", background_type == "transparent")
@@ -40,6 +37,7 @@ def _resolve_bg_processing_config(target_dir):
     alpha_matting = params.get("bg_alpha_matting", True)
     sharpen_edges = params.get("bg_sharpen_edges", False)
     sharpen_threshold = params.get("bg_sharpen_threshold", 200)
+    grid_size = params.get("grid_size", DEFAULT_GRID_SIZE)
 
     return {
         "enabled": bool(enabled),
@@ -49,14 +47,20 @@ def _resolve_bg_processing_config(target_dir):
         "alpha_matting": bool(alpha_matting),
         "sharpen_edges": bool(sharpen_edges),
         "sharpen_threshold": int(sharpen_threshold),
+        "grid_size": grid_size,
     }
 
-def _slice_grid_to_cells_original(img, width, height):
-    item_width = width // 3
-    item_height = height // 3
+def _slice_grid_to_cells_original(img, width, height, grid_size=None):
+    grid_size = grid_size or DEFAULT_GRID_SIZE
+    config = GRID_CONFIG.get(grid_size, GRID_CONFIG[DEFAULT_GRID_SIZE])
+    rows = config["rows"]
+    cols = config["cols"]
+    
+    item_width = width // cols
+    item_height = height // rows
     cells = []
-    for row in range(3):
-        for col in range(3):
+    for row in range(rows):
+        for col in range(cols):
             left = col * item_width
             upper = row * item_height
             box = (left, upper, left + item_width, upper + item_height)
@@ -86,14 +90,32 @@ def process_single_grid(target_dir, bg_cfg=None):
         "enabled": False,
         "method": "rembg",
         "model": "isnet-anime",
+        "grid_size": DEFAULT_GRID_SIZE,
     }
 
     prompt_path = os.path.join(target_dir, "prompt.txt")
     is_animated = False
+    grid_size = bg_cfg.get("grid_size", DEFAULT_GRID_SIZE)
+    
     if os.path.exists(prompt_path):
         with open(prompt_path, 'r', encoding='utf-8') as f:
             content = f.read()
-            is_animated = "9-frame animation" in content or "9-frame animation sprite sheet" in content or "A HIGHLY DYNAMIC 9-frame animation" in content
+            if "16-frame animation" in content or "16-frame animation sprite sheet" in content:
+                grid_size = 16
+                is_animated = True
+            elif "9-frame animation" in content or "9-frame animation sprite sheet" in content or "A HIGHLY DYNAMIC 9-frame animation" in content:
+                grid_size = 9
+                is_animated = True
+            elif "16 different expressions" in content or "SIXTEEN" in content:
+                grid_size = 16
+            elif "9 different expressions" in content or "NINE" in content:
+                grid_size = 9
+
+    grid_config = GRID_CONFIG.get(grid_size, GRID_CONFIG[DEFAULT_GRID_SIZE])
+    total_frames = grid_config["total_frames"]
+    rows = grid_config["rows"]
+    cols = grid_config["cols"]
+    gif_duration = grid_config["gif_duration_ms"]
 
     try:
         img = Image.open(grid_path)
@@ -116,7 +138,7 @@ def process_single_grid(target_dir, bg_cfg=None):
 
     img_original = img.copy()
 
-    cells_original_high_res = _slice_grid_to_cells_original(img_original, width, height)
+    cells_original_high_res = _slice_grid_to_cells_original(img_original, width, height, grid_size)
     cells_original = [c.resize((240, 240), Image.Resampling.LANCZOS) for c in cells_original_high_res]
 
     cells_nobg = None
@@ -134,13 +156,13 @@ def process_single_grid(target_dir, bg_cfg=None):
                     img_nobg.save(nobg_path, "PNG")
                     print(f"[✓] Saved full grid after OpenCV background removal: {nobg_path}")
                     
-                    cells_nobg_high_res = _slice_grid_to_cells_original(img_nobg, width, height)
+                    cells_nobg_high_res = _slice_grid_to_cells_original(img_nobg, width, height, grid_size)
                     any_modified = True
             except Exception as e:
                 print(f"[!] OpenCV background removal failed on full grid: {e}. Falling back to cell-by-cell.", file=sys.stderr)
 
         if not any_modified:
-            print(f"[*] Extracting 9 individual bounding-boxes before background removal for ultimate precision...")
+            print(f"[*] Extracting {total_frames} individual bounding-boxes before background removal for ultimate precision...")
             for cell in cells_original_high_res:
                 nobg_cell = apply_background_removal(cell, bg_cfg)
                 cells_nobg_high_res.append(nobg_cell)
@@ -149,11 +171,11 @@ def process_single_grid(target_dir, bg_cfg=None):
 
             if any_modified:
                 stitched = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-                item_w = width // 3
-                item_h = height // 3
+                item_w = width // cols
+                item_h = height // rows
                 for i, cell in enumerate(cells_nobg_high_res):
-                    row = i // 3
-                    col = i % 3
+                    row = i // cols
+                    col = i % cols
                     stitched.paste(cell, (col * item_w, row * item_h))
 
                 nobg_path = os.path.join(target_dir, "original_grid_nobg.png")
@@ -171,7 +193,7 @@ def process_single_grid(target_dir, bg_cfg=None):
         shutil.rmtree(legacy_white, ignore_errors=True)
     dir_origin = os.path.join(target_dir, "origin")
     os.makedirs(dir_origin, exist_ok=True)
-    for i in range(9):
+    for i in range(total_frames):
         idx = i + 1
         cells_original[i].save(os.path.join(dir_origin, f"sticker_{idx:02d}.png"), "PNG")
     if is_animated:
@@ -179,7 +201,7 @@ def process_single_grid(target_dir, bg_cfg=None):
             os.path.join(dir_origin, "animated_sticker.gif"),
             save_all=True,
             append_images=cells_original[1:],
-            duration=100,
+            duration=gif_duration,
             loop=0,
             disposal=2,
         )
@@ -187,7 +209,7 @@ def process_single_grid(target_dir, bg_cfg=None):
     dir_nobg = os.path.join(target_dir, "nobg")
     if cells_nobg is not None:
         os.makedirs(dir_nobg, exist_ok=True)
-        for i in range(9):
+        for i in range(total_frames):
             idx = i + 1
             cells_nobg[i].save(os.path.join(dir_nobg, f"sticker_{idx:02d}.png"), "PNG")
         if is_animated:
@@ -195,7 +217,7 @@ def process_single_grid(target_dir, bg_cfg=None):
                 os.path.join(dir_nobg, "animated_sticker.gif"),
                 save_all=True,
                 append_images=cells_nobg[1:],
-                duration=100,
+                duration=gif_duration,
                 loop=0,
                 disposal=2,
             )
@@ -268,7 +290,7 @@ def _pack_wechat_export(workspace_root, is_static):
             if not os.path.exists(target):
                 target = os.path.join(base, "origin")
             if os.path.exists(target):
-                for i in range(1, 10):
+                for i in range(1, 17):
                     fpath = os.path.join(target, f"sticker_{i:02d}.png")
                     if os.path.exists(fpath):
                         items.append(fpath)
@@ -342,10 +364,10 @@ def _pack_wechat_export(workspace_root, is_static):
         check_size(os.path.join(main_dir, f), 500, f"主图 {f}")
     if os.path.exists(thumb_dir):
         for f in os.listdir(thumb_dir):
-            check_size(os.path.join(thumb_dir, f), 100, f"缩略图 {f}")
-    check_size(os.path.join(export_root, "cover.png"), 500, "封面图 cover.png")
-    check_size(os.path.join(export_root, "icon.png"), 100, "图标 icon.png")
-    check_size(os.path.join(export_root, "banner.png"), 500, "横幅 banner.png")
+            check_size(os.path.join(thumb_dir, f), 50, f"缩略图 {f}")
+    check_size(os.path.join(export_root, "cover.png"), 80, "封面图 cover.png")
+    check_size(os.path.join(export_root, "icon.png"), 30, "图标 icon.png")
+    check_size(os.path.join(export_root, "banner.png"), 80, "横幅 banner.png")
 
     print(f"\n[✓] WeChat standard export package created at: {export_root}")
     print(f"    Total expressions: {len(items)}")

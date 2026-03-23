@@ -52,3 +52,26 @@ BACKGROUND_TYPE_MAPPING = {
 }
 
 NEGATIVE_PROMPT = "checkerboard background, transparent background artifacts, noise, film grain, dirty background, dust, shadows on ground, drop shadow, lighting artifacts, borders, frames, grid lines, cell dividers, white borders, black borders, colored borders, padding around character, vignette, shadow effects, glow effects, gradient background, patterned background, scenery, background objects, text watermarks, logos, signatures, low quality, blurry, distorted, deformed, extra limbs, missing limbs, cropped character, character touching grid edges, overlapping cells"
+
+# Grid Configuration
+# grid_size: 9 (3x3, default) or 16 (4x4, longer animation)
+GRID_CONFIG = {
+    9: {
+        "rows": 3,
+        "cols": 3,
+        "total_frames": 9,
+        "layout_desc": "3x3 grid",
+        "gif_duration_ms": 100,  # 9 frames * 100ms = 0.9s
+        "chunk_size": 9,
+    },
+    16: {
+        "rows": 4,
+        "cols": 4,
+        "total_frames": 16,
+        "layout_desc": "4x4 grid",
+        "gif_duration_ms": 100,  # 16 frames * 100ms = 1.6s
+        "chunk_size": 16,
+    },
+}
+
+DEFAULT_GRID_SIZE = 9  # Default to 9-grid (3x3)

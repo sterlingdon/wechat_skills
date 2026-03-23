@@ -122,10 +122,10 @@ final_alpha = max(alpha_opencv, alpha_rembg)
 
 ### 3.1 OpenCV 模式：整图处理
 
-对**完整的九宫格大图**一次性处理。
+对**完整的宫格大图**一次性处理。
 
 **原因**：
-- 保证 9 个表情的边缘裁剪规则完全一致
+- 保证所有表情的边缘裁剪规则完全一致
 - 减少 GIF 边缘闪烁问题
 
 **前置检测**：
@@ -136,7 +136,7 @@ is_mostly_white_background(img, threshold=245)
 
 ### 3.2 Rembg 模式：单格处理
 
-先切分为 **9 张小图**，再分别处理。
+先切分为多张小图，再分别处理。
 
 **原因**：
 - Rembg 在单张小图上准确率最高
@@ -263,7 +263,7 @@ pip install onnxruntime
 |------|------|
 | `modules/background.py` | 统一接口与 dual 实现 |
 | `modules/bg_opencv.py` | OpenCV 算法实现 |
-| `modules/postprocess.py` | 九宫格切分与 GIF 合成 |
+| `modules/postprocess.py` | 宫格切分与 GIF 合成 |
 
 ---
 
