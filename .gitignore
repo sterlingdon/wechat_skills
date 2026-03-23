@@ -35,9 +35,11 @@ __pycache__/
 *$py.class
 *.so
 
-# Environments
+# Environments & secrets
 .env
-.env.local
+.env.*
+!.env.example
+*.local
 .venv
 env/
 venv/
@@ -48,3 +50,16 @@ ENV/
 .vscode/
 *.swp
 *.swo
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+
+# Sensitive config files (user-specific)
+*_config.json
