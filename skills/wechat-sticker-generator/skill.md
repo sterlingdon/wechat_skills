@@ -97,7 +97,7 @@ pip install onnxruntime
   "color_mood": "BRIGHT_VIBRANT",
   "background_type": "transparent",
   "enable_bg_removal": true,
-  "bg_removal_method": "opencv",
+  "bg_removal_method": "dual",
   "bg_removal_model": "isnet-anime",
   "expressions": [
     {
@@ -117,16 +117,30 @@ pip install onnxruntime
 
 **关于去背景算法配置 (`bg_removal_method`)：**
 
-本项目采用了**双轨背景去除系统**，可随时切换：
+本项目采用了**三轨背景去除系统**，支持灵活切换：
 
 | `bg_removal_method` | 处理粒度 | 原理与特点 |
 |---------------------|---------|----------|
-| **`opencv`** (首选) | **整图一次性处理** | **质量最优的抗锯齿**：基于漫水填充 (`floodFill`) + 柔和边缘 Alpha 过渡。处理整张九宫格大图，确保九帧表情切图后的边缘裁切规则完全一致（有效防止 GIF 边缘闪烁问题）。对字体周边和半透明毛发过渡处理完美。**前提是原图背景必须非常接近纯白**。 |
-| **`rembg`** (兜底) | **单格切分后处理** | **极高的鲁棒性**：基于深度学习（Semantic Segmentation），无视复杂背景强行抠图。由于大图信息量复杂容易导致模型注意力涣散，所以系统会**先切分为 9 张小图再分别送入 rembg**。对纯色白底有轻微锯齿感，适合 OpenCV 失败时的智能兜底。 |
+| **`opencv`** | **整图一次性处理** | **质量最优的抗锯齿**：基于漫水填充 (`floodFill`) + 柔和边缘 Alpha 过渡。处理整张九宫格大图，确保九帧表情切图后的边缘裁切规则完全一致（有效防止 GIF 边缘闪烁问题）。对字体周边和半透明毛发过渡处理完美。**前提是原图背景必须非常接近纯白**。⚠️ **注意**：浅色前景（水墨、淡彩、浅色皮肤）可能被误删。 |
+| **`rembg`** | **单格切分后处理** | **极高的鲁棒性**：基于深度学习（Semantic Segmentation），无视复杂背景强行抠图。由于大图信息量复杂容易导致模型注意力涣散，所以系统会**先切分为 9 张小图再分别送入 rembg**。对纯色白底有轻微锯齿感，适合 OpenCV 失败时的智能兜底。⚠️ **注意**：可能误删表情包文字。 |
+| **`dual`** (推荐) | **双通道合并** | **最佳平衡方案**：同时运行 OpenCV 和 Rembg，取两者 Alpha 的最大值 (`max(alpha_opencv, alpha_rembg)`)。**优点**：OpenCV 保护文字，Rembg 保护浅色前景（水墨、淡彩、像素风、Q版浅色皮肤）。**适用**：水墨风、水彩风、像素风、Q版等浅色前景场景。 |
+
+**风格与方法推荐映射：**
+
+| 风格 (style_preset) | 推荐方法 | 原因 |
+|---------------------|---------|------|
+| `CHINESE_INK` (水墨风) | `dual` ⭐ | 淡墨易被 opencv 删除，dual 保护水墨+文字 |
+| `WATERCOLOR` (水彩风) | `dual` ⭐ | 淡彩易被 opencv 删除，dual 保护水彩+文字 |
+| `PIXEL_ART` (像素风) | `dual` ⭐ | 浅色像素易被删除，dual 保护像素+文字 |
+| `CHIBI_SD` (Q版) | `dual` | 浅色皮肤保护+文字保护 |
+| `2D_KAWAII` | `dual` 或 `opencv` | 深色角色可用 opencv，浅色用 dual |
+| `MEME_STYLE` | `opencv` | 文字保护优先，边缘质量最优 |
+| `3D_CLAY` / `3D_PIXAR` | `dual` | 半透明效果保护 |
 
 **执行细节与 Fallback 机制：**
 - 微信的官方表情包要求透明背景，去除背景更符合审核要求
-- 默认推荐设置 `bg_removal_method: "opencv"`
+- **推荐设置 `bg_removal_method: "dual"`**（最佳平衡，保护浅色前景+文字）
+- 对于纯白背景且前景颜色较深的简单图，可使用 `opencv` 获得最佳边缘质量
 - **自动降级**：如果配置了 `opencv` 算法，但在执行前系统检测出生成的图表并非纯白背景（AI 幻觉生成了复杂场景图）或执行期间出现错误，系统会自动抛出异常，**并无缝降级使用 `rembg` 进行按格拆分抠图兜底处理**，不用人工介入！
 - 去背景失败时会保留该帧原图。
 - 去背景开启且成功时，会在同目录下保存 **`original_grid_nobg.png`**：整图去背景之后的 PNG，便于对照 `original_grid.png` 检查抠图效果

@@ -46,6 +46,62 @@ def _remove_background_with_rembg(img, model_name="isnet-anime", alpha_matting=T
         out_img = out_img.convert("RGBA")
     return out_img
 
+def _remove_background_dual(img, model_name="isnet-anime", alpha_matting=True):
+    if img.mode != 'RGBA':
+        img = img.convert('RGBA')
+    
+    original_arr = np.array(img)
+    h, w = original_arr.shape[:2]
+    
+    alpha_opencv = None
+    try:
+        from modules.bg_opencv import remove_background_opencv
+        opencv_result = remove_background_opencv(img.convert('RGB'))
+        if opencv_result.mode == 'RGBA':
+            alpha_opencv = np.array(opencv_result)[:, :, 3]
+    except Exception as e:
+        try:
+            import cv2
+            rgb = np.array(img.convert('RGB'))
+            mask = np.zeros((h + 2, w + 2), np.uint8)
+            seeds = [(0, 0), (w-1, 0), (0, h-1), (w-1, h-1)]
+            flags = cv2.FLOODFILL_MASK_ONLY | (255 << 8) | cv2.FLOODFILL_FIXED_RANGE
+            for seed in seeds:
+                cv2.floodFill(rgb, mask, seed, (255, 255, 255), (15, 15, 15), (15, 15, 15), flags)
+            bg_mask = mask[1:-1, 1:-1] > 0
+            img_norm = rgb.astype(np.float32) / 255.0
+            dist_from_white = 1.0 - img_norm.min(axis=2)
+            alpha_opencv = np.ones((h, w), dtype=np.float32)
+            alpha_opencv[bg_mask] = dist_from_white[bg_mask]
+            alpha_opencv[alpha_opencv < (15.0 / 255.0)] = 0.0
+            alpha_opencv = (alpha_opencv * 255).astype(np.uint8)
+            print("[*] Dual mode: OpenCV fallback (relaxed threshold) succeeded", file=sys.stderr)
+        except Exception as e2:
+            print(f"[*] Dual mode: OpenCV failed ({e}, {e2}), will rely on rembg only", file=sys.stderr)
+    
+    alpha_rembg = None
+    try:
+        rembg_result = _remove_background_with_rembg(img, model_name=model_name, alpha_matting=alpha_matting)
+        if rembg_result.mode == 'RGBA':
+            alpha_rembg = np.array(rembg_result)[:, :, 3]
+    except Exception as e:
+        print(f"[*] Dual mode: Rembg failed ({e}), will rely on opencv only", file=sys.stderr)
+    
+    if alpha_opencv is None and alpha_rembg is None:
+        raise RuntimeError("Dual mode: Both OpenCV and Rembg failed")
+    
+    if alpha_opencv is None:
+        final_alpha = alpha_rembg
+    elif alpha_rembg is None:
+        final_alpha = alpha_opencv
+    else:
+        final_alpha = np.maximum(alpha_opencv, alpha_rembg)
+    
+    final_arr = original_arr.copy()
+    final_arr[:, :, 3] = final_alpha
+    
+    return Image.fromarray(final_arr, 'RGBA')
+
 def _remove_background_via_local_script(img, script_path, model_name="isnet-general-use"):
     if not script_path:
         raise RuntimeError("未提供 bg_removal_script_path")
@@ -98,9 +154,11 @@ def apply_background_removal(img, bg_cfg):
             out = remove_background_opencv(img)
         elif method == "rembg":
             out = _remove_background_with_rembg(img, model_name=model_name, alpha_matting=alpha_matting)
+        elif method == "dual":
+            out = _remove_background_dual(img, model_name=model_name, alpha_matting=alpha_matting)
         else:
-            print(f"[!] Unknown bg_removal_method={method}, using rembg", file=sys.stderr)
-            out = _remove_background_with_rembg(img, model_name=model_name, alpha_matting=alpha_matting)
+            print(f"[!] Unknown bg_removal_method={method}, using dual", file=sys.stderr)
+            out = _remove_background_dual(img, model_name=model_name, alpha_matting=alpha_matting)
 
         # Sanitize alpha: zero out very faint residues (prevents ghosting/flicker in GIFs)
         if out is not None and out.mode == "RGBA":
