@@ -97,12 +97,8 @@ pip install onnxruntime
   "color_mood": "BRIGHT_VIBRANT",
   "background_type": "transparent",
   "enable_bg_removal": true,
-  "bg_removal_method": "rembg",
-  "bg_removal_model": "isnet-general-use",
-  "bg_removal_script_path": "",
-  "bg_preserve_overlay": true,
-  "bg_preserve_white_tolerance": 40,
-  "bg_preserve_missing_alpha_below": 220,
+  "bg_removal_method": "opencv",
+  "bg_removal_model": "isnet-anime",
   "expressions": [
     {
       "action": "高度戏剧化的动作描述（必须有大幅度的身体运动！）",
@@ -112,38 +108,30 @@ pip install onnxruntime
 }
 ```
 
-### 3.0 背景类型 (background_type)
+### 3.0 背景类型与去除算法 (Background Type & Removal Method)
 
 | 选项          | 背景描述           | 适用场景                               |
 | ------------- | ------------------ | -------------------------------------- |
 | `transparent` | 透明背景           | **默认值**，微信官方表情包要求透明背景 |
 | `white`       | 纯白背景 (#FFFFFF) | 需要纯色背景时的备选                   |
 
-**注意：**
+**关于去背景算法配置 (`bg_removal_method`)：**
 
+本项目采用了**双轨背景去除系统**，可随时切换：
+
+| `bg_removal_method` | 处理粒度 | 原理与特点 |
+|---------------------|---------|----------|
+| **`opencv`** (首选) | **整图一次性处理** | **质量最优的抗锯齿**：基于漫水填充 (`floodFill`) + 柔和边缘 Alpha 过渡。处理整张九宫格大图，确保九帧表情切图后的边缘裁切规则完全一致（有效防止 GIF 边缘闪烁问题）。对字体周边和半透明毛发过渡处理完美。**前提是原图背景必须非常接近纯白**。 |
+| **`rembg`** (兜底) | **单格切分后处理** | **极高的鲁棒性**：基于深度学习（Semantic Segmentation），无视复杂背景强行抠图。由于大图信息量复杂容易导致模型注意力涣散，所以系统会**先切分为 9 张小图再分别送入 rembg**。对纯色白底有轻微锯齿感，适合 OpenCV 失败时的智能兜底。 |
+
+**执行细节与 Fallback 机制：**
 - 微信的官方表情包要求透明背景，去除背景更符合审核要求
-- 透明背景会在后处理时自动去背景（默认 `rembg` 模型）
-- 可通过 `bg_removal_method` 切换：`rembg`（默认）或 `script`（本地脚本）
-- **`bg_preserve_overlay`（默认 true）**：rembg 容易把深色配文当背景抠掉；会在抠图后把「原图不是纯白」却被抹成透明的像素（文字、深色描边等）按原图补回，只去白底
-- 可调 `bg_preserve_white_tolerance`（默认 40）：数值越大，越把浅灰也当作「白底」从而不强行补回，能有效避免脏背景或光斑被“死抠死留”的情况；数值越小则越容易保留真实的浅灰描边或淡阴影。
-- 去背景失败时保留该帧原图，可检查依赖或调整 `bg_removal_model`
-- 去背景开启且成功时，会在同目录下保存 **`original_grid_nobg.png`**：整张九宫格去背景之后、切成 9 张贴纸之前的 PNG，便于对照 `original_grid.png` 检查抠图效果
-- **目录统一**：**`origin/`** 内为**原图输出**（仅裁剪+240 缩放，无压白底、无 rembg）；去背景成功时**额外**多 **`nobg/`**；未开去背景或失败时只有 `origin/`（会删除遗留的 `nobg/` 与旧版 `white/` 目录）
-- **汇总打包导出**：同一 workspace 在 process 时，会在根目录生成 **`wechat_export/`** 文件夹，它是专用于微信后台的“大礼包”，内含符合规格的主图（`main/`）、缩略图（`thumb/`）、封面（`cover.png`）、图标（`icon.png`）及横幅（`banner.png`）。
-
-#### 本地脚本模式（`bg_removal_method: "script"`）
-
-建议脚本接口优先支持以下参数形式（主流程会先按这个格式调用）：
-
-```bash
-python3 your_remove_bg.py --input /tmp/in.png --output /tmp/out.png --model isnet-general-use
-```
-
-如果你的脚本是简版参数，也兼容：
-
-```bash
-python3 your_remove_bg.py /tmp/in.png /tmp/out.png
-```
+- 默认推荐设置 `bg_removal_method: "opencv"`
+- **自动降级**：如果配置了 `opencv` 算法，但在执行前系统检测出生成的图表并非纯白背景（AI 幻觉生成了复杂场景图）或执行期间出现错误，系统会自动抛出异常，**并无缝降级使用 `rembg` 进行按格拆分抠图兜底处理**，不用人工介入！
+- 去背景失败时会保留该帧原图。
+- 去背景开启且成功时，会在同目录下保存 **`original_grid_nobg.png`**：整图去背景之后的 PNG，便于对照 `original_grid.png` 检查抠图效果
+- **目录统一**：**`origin/`** 内为**原图输出**（仅裁剪+240 缩放，无去背）；去背景成功时**额外**多 **`nobg/`**；未开去背景或全量失败时只有 `origin/`
+- **汇总打包导出**：同一 workspace 在 process 时，会在根目录生成 **`wechat_export/`** 文件夹，包含 `main/`, `thumb/`, `cover.png`, `icon.png`, `banner.png`, 及填单信息文本 `upload_info.txt`。
 
 ---
 
@@ -476,93 +464,76 @@ Gemini 会自动进行以下处理：
 
 ## 7. 智能体执行流程 (Execution Workflow)
 
-### 【第零步】角色定妆（统一生成标准基准图）
+### 【第一步】沙盒建站
 
-**⚠️ 核心定律：所有表情包的生成，必须依赖一张绝对中立、没有夸张动作的“定妆图” (`base_reference.png`)。决不允许直接拿未经处理的复杂照片或原图去跑多格表情包，也决不允许把夸张动作写进定妆步骤！**
+在启动流水线之前，必须先创建一个隔离的工作站目录。
 
-Agent 必须根据用户提供的素材情况，严格选择以下三条路线之一来获取 `base_reference.png`：
-
-**情况 A：用户完全没有提供图片（只给了文字）**
-必须先让 AI “无中生有”画一张标准定妆图。
 ```bash
-# 1. 创建工作空间
 DIR_PATH=$(python3 sticker_utils.py create_dir --provider gemini)
+```
 
-# 2. 生成单独的角色定妆图（必须纯外观展示，绝无夸张动作）
-# 参数顺序：character_prompt, style_preset, output_path
+### 【第二步】角色定妆与入驻（统一生成标准基准图）
+
+**⚠️ 核心定律：所有表情包的生成，必须依赖一张绝对中立、没有夸张动作的“定妆图” (`base_reference.png`)。决不允许把夸张动作写进定妆步骤！**
+用户的原始照片及生成的定妆图，**必须都存放于 `$DIR_PATH` 目录下**。
+
+**情况 A：无图生成**
+```bash
 python3 sticker_utils.py draw_character "角色的外观描述..." "2D_KAWAII" "$DIR_PATH/base_reference.png"
-
-# 3. 将生成的 base_reference.png 作为 reference_image 写入 params.json
 ```
 
-**情况 B：用户提供了一张原始图片（例如：真人照片、未处理的插画、背景复杂的原图）**
-**绝对不能**直接拿原图去跑表情包流水线！必须先将其“提取优化”成一张规范的标准定妆图。
-**⚠️ 致命红线：转换时的 `additional_description` 必须强硬要求“保持中立、面无表情、没有任何动作、纯白背景”。绝对不能把表情包要做的夸张动作（如吐血、大哭、疯狂敲键盘）写进这个指令里！**
+**情况 B：有复杂原图（如真人照片）转换**
 ```bash
-# 1. 创建工作空间
-DIR_PATH=$(python3 sticker_utils.py create_dir --provider gemini)
-
-# 2. 将复杂原图/照片转换为干净的标准定妆图
-USER_PHOTO="/path/to/user/photo.jpg"
-python3 sticker_utils.py transform_photo "$USER_PHOTO" "MEME_STYLE" "$DIR_PATH/base_reference.png" "保持角色外观特征不变。输出一张纯粹的、面无表情或正常微笑的角色参考图（定妆图）。绝对不要有任何夸张动作、不要有疲惫感。纯白背景，正面半身像。"
-
-# 3. 之后，将生成的 base_reference.png 作为 reference_image 写入 params.json
+cp /path/to/user/photo.jpg $DIR_PATH/user_original_photo.jpg
+python3 sticker_utils.py transform_photo "$DIR_PATH/user_original_photo.jpg" "MEME_STYLE" "$DIR_PATH/base_reference.png" "保持角色外观特征不变，纯白背景正面半身像。绝对不要有任何夸张动作。"
 ```
 
-**情况 C：用户提供了一张**已经处理好的、完美的**中立标准定妆图**
-只有在用户明确表示“这张图已经是一张定妆图”，或者该图显然是纯白背景、正面中立的标准化形象时，才可以跳过生图步骤，直接把它当作 `reference_image` 填入 `params.json`。
+**情况 C：已有完美的白底标准定妆图**
+```bash
+cp /path/to/perfect/reference.png $DIR_PATH/base_reference.png
+```
 
 ---
 
-### 【第一步】沙盒建站
+### 【第三步】写入配置
 
-```bash
-DIR_PATH=$(python3 sticker_utils.py create_dir --provider gemini)
-```
+将组装好的 JSON 写入 `$DIR_PATH/params.json`。
+**确保 `reference_image` 字段已填入第二步中准备好的 `$DIR_PATH/base_reference.png`！**
 
-### 【第二步】写入配置（含 reference_image）
+### 【第四步】解析裂变（配置转 Prompt）
 
-将组装好的 JSON 写入 `$DIR_PATH/params.json`
-**确保 reference_image 字段已填入第零步生成的基底图路径！**
-
-### 【第三步】解析裂变
-
+为每个表情动作创建独立的生成子目录和 Prompt 文件：
 ```bash
 python3 sticker_utils.py build_prompts $DIR_PATH
 ```
 
-脚本会自动将 reference_image 写入每个子目录的 prompt.txt
+### 【第五步】批量生图（AI 出九宫格原图）
 
-### 【第四步】批量生图
+使用循环遍历所有 `anim_*` 或 `static_*` 目录生成大网格图（绝不做裁切或抠图）。
 
 ```bash
-# 情况A：无参考图（或参考图已在prompt中处理）
-# 注意：Agent 应该使用循环来处理所有存在的 anim_* 或 static_* 目录！
+# 情况A：完全没有提供任何基准参考图，自由生成
 python3 sticker_utils.py draw $DIR_PATH/anim_01/prompt.txt $DIR_PATH/anim_01/original_grid.png
-# ... 对其他有效目录继续执行 ...
 
-# 情况B：有参考图（真人照片转换的情况，必须用 draw_with_ref！）
-# 注意：同样的，循环调用所有存在拆分后的子目录！
+# 情况B：带有 reference_image 基准图
 python3 sticker_utils.py draw_with_ref $DIR_PATH/anim_01/prompt.txt $DIR_PATH/anim_01/original_grid.png $DIR_PATH/base_reference.png
-# ... 对其他有效目录继续执行 ...
 ```
+> **可插拔调试提示**：若目录下已存在人工放入的 `original_grid.png`，可直接跳过此步！
 
-### 【第五步】切片封包
+### 【第六步】去背景与切片（生成最终贴纸和 GIF）
 
+根据 `params.json` 的 `bg_removal_method` 执行抠图与切割。
 ```bash
 python3 sticker_utils.py process $DIR_PATH
 ```
 
 ---
 
-### 【第六步】AI 补充微信物料（Banner / Cover / 介绍文案）
+### 【第七步】AI 补充微信物料（Banner / Cover / 介绍文案）
 
-⚠️ **这是主流程必要步骤，不是可选操作！** `process` 命令会生成基础的 `wechat_export/`，但 cover 和 banner 只是从第一帧截取的占位图。本步骤会调用 AI 生成真正的专属封面、横幅和完整上传文案。
-
+自动生成 `wechat_export/` 目录所需的封面和文案材料。
 ```bash
-# 所有信息（角色名、场景主题、吉祥物外观等）均自动从 $DIR_PATH/params.json 读取
-# Agent 只需传入目录路径，无需硬写任何角色或场景信息
-python3 wechat_meta.py $DIR_PATH
+python3 sticker_utils.py wechat_meta $DIR_PATH
 ```
 
 **本步骤的产出（会覆盖 process 的占位内容）：**
@@ -574,7 +545,7 @@ python3 wechat_meta.py $DIR_PATH
 | `wechat_export/cover.png` | 240×240 | AI 专属绘制的封面（角色特写，直视镜头，高吸引力） |
 | `wechat_export/icon.png` | 50×50 | 封面缩小版，用于聊天面板图标 |
 
-**动态读取机制（重要）：** `wechat_meta.py` 的所有 AI Prompt 均通过读取 `params.json` 动态组装：
+**动态读取机制（重要）：** `wechat_meta` 生成功能的所有 AI Prompt 均通过读取 `params.json` 动态组装：
 - `set_name`、`character_prompt`、`scene_theme`、`style_preset` 等字段都从 params 文件取值
 - 脚本本身不含任何硬编码的角色名或场景，适用于任意表情包套件
 
