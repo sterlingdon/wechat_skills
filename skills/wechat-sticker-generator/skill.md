@@ -312,7 +312,7 @@ python3 sticker_utils.py process $DIR_PATH
 
 # Step 6: AI 补充微信物料（Banner / Cover / 介绍文案）
 # 所有信息均从 $DIR_PATH/params.json 动态读取，无需手动传入角色名或场景
-python3 wechat_meta.py $DIR_PATH
+python3 sticker_utils.py wechat_meta $DIR_PATH
 ```
 
 ### 预期产出
