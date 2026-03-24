@@ -75,3 +75,71 @@ GRID_CONFIG = {
 }
 
 DEFAULT_GRID_SIZE = 9  # Default to 9-grid (3x3)
+
+
+# ============================================================
+# WeChat Red Packet Cover (微信红包封面) Specifications
+# Official Platform: https://cover.weixin.qq.com/
+# ============================================================
+
+RED_PACKET_CONFIG = {
+    # 封面主图 (Cover Main Image) - 必须提供
+    "cover_main": {
+        "width": 957,
+        "height": 1278,
+        "formats": ["PNG", "JPG", "JPEG"],
+        "max_file_size_kb": 500,
+        "color_mode": "RGB",
+    },
+    # 视频封面 (Video Cover)
+    "cover_video": {
+        "width": 957,
+        "height": 1278,
+        "format": "MP4",
+        "codec": "H.264/AVC",
+        "min_duration_sec": 1,
+        "max_duration_sec": 3,
+        "max_file_size_mb": 3,
+        "max_bitrate_kbps": 2000,
+        "fps": 30,
+    },
+    # 品牌 Logo (Brand Logo) - 可选
+    "brand_logo": {
+        "max_width": 200,
+        "max_height": 200,
+        "formats": ["PNG", "JPG", "JPEG"],
+        "max_file_size_kb": 100,
+        "transparent_bg": True,
+    },
+    # 封面故事图片 (Cover Story Images) - 可选
+    "story_image": {
+        "width": 750,
+        "height": 1250,
+        "formats": ["PNG", "JPG"],
+        "max_file_size_kb": 300,
+        "max_count": 5,
+    },
+    # 封面故事视频 (Cover Story Video) - 可选
+    "story_video": {
+        "min_width": 720,
+        "aspect_ratio_min": (3, 5),  # 3:5
+        "aspect_ratio_max": (16, 9),  # 16:9
+        "format": "MP4",
+        "codec": "H.264/AVC",
+        "max_duration_sec": 15,
+        "max_bitrate_kbps": 1600,
+        "max_file_size_mb": 10,
+    },
+    # 设计安全区域
+    "safe_zones": {
+        "top_margin_px": 150,      # 头像/昵称区域
+        "bottom_margin_px": 120,   # "开"按钮区域
+        "edge_margin_px": 16,      # 边缘安全区
+    },
+}
+
+# 默认使用封面主图尺寸
+DEFAULT_RED_PACKET_SIZE = (
+    RED_PACKET_CONFIG["cover_main"]["width"],
+    RED_PACKET_CONFIG["cover_main"]["height"]
+)
