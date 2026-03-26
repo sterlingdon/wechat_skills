@@ -3,9 +3,7 @@ import re
 import json
 from datetime import datetime
 from typing import Dict
-import markdown
 import requests
-from premailer import transform
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -88,36 +86,13 @@ def process_markdown_images(
     return md_content, first_thumb_media_id, image_map
 
 
-def convert_md_to_wechat_html(
-    md_content: str, style_name: str = "wechat-default"
-) -> str:
-    css_path = os.path.join(
-        project_root, "assets", "templates", "styles", f"{style_name}.css"
-    )
-
-    if not os.path.exists(css_path):
-        css_path = os.path.join(
-            project_root, "assets", "templates", "styles", "wechat-default.css"
-        )
-
-    html_body = markdown.markdown(md_content, extensions=["tables", "fenced_code"])
-
-    with open(css_path, "r", encoding="utf-8") as f:
-        css_content = f.read()
-
-    full_html = f"""
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>{css_content}</style>
-    </head>
-    <body><div class="wechat-content">{html_body}</div></body>
-    </html>
-    """
-
-    inline_html = transform(full_html)
-    return inline_html
+def load_preview_html(md_path: str) -> str:
+    """Load the existing preview HTML file if it exists."""
+    preview_path = md_path.replace(".md", "_preview.html")
+    if os.path.exists(preview_path):
+        with open(preview_path, "r", encoding="utf-8") as f:
+            return f.read()
+    return None
 
 
 def push_to_wechat_draft(
@@ -167,6 +142,53 @@ def save_sync_record(record: dict, base_dir: str):
     print(f"💾 同步记录已保存: {record_file}")
 
 
+def archive_to_published(
+    source_md: str,
+    final_html: str,
+    record: dict,
+    article_date: str
+):
+    """Archive published materials to content/04-published/YYYY-MM-DD/"""
+    published_dir = os.path.join(
+        project_root, "content", "04-published", article_date
+    )
+    os.makedirs(published_dir, exist_ok=True)
+
+    # Get article base name
+    base_name = os.path.splitext(os.path.basename(source_md))[0]
+
+    # 1. Save final HTML sent to WeChat
+    html_path = os.path.join(published_dir, f"{base_name}_final.html")
+    with open(html_path, "w", encoding="utf-8") as f:
+        f.write(final_html)
+    print(f"📦 归档 HTML: {html_path}")
+
+    # 2. Save sync record
+    record_path = os.path.join(published_dir, "sync_record.json")
+    with open(record_path, "w", encoding="utf-8") as f:
+        json.dump(record, f, ensure_ascii=False, indent=2)
+    print(f"📦 归档记录: {record_path}")
+
+    # 3. Copy original markdown
+    md_path = os.path.join(published_dir, f"{base_name}.md")
+    with open(source_md, "r", encoding="utf-8") as src:
+        with open(md_path, "w", encoding="utf-8") as dst:
+            dst.write(src.read())
+    print(f"📦 归档原文: {md_path}")
+
+    # 4. Copy images directory if exists
+    source_dir = os.path.dirname(source_md)
+    source_images = os.path.join(source_dir, "images")
+    if os.path.exists(source_images):
+        target_images = os.path.join(published_dir, "images")
+        if not os.path.exists(target_images):
+            import shutil
+            shutil.copytree(source_images, target_images)
+            print(f"📦 归档图片: {target_images}")
+
+    print(f"✅ 物料已归档至: {published_dir}")
+
+
 if __name__ == "__main__":
     import sys
     import importlib
@@ -176,6 +198,9 @@ if __name__ == "__main__":
     analyze_article = importlib.import_module(
         "scripts.pipeline.01_article_analyze"
     ).analyze_article
+    render_markdown_to_wechat_html = importlib.import_module(
+        "scripts.pipeline.04_html_render"
+    ).render_markdown_to_wechat_html
 
     if len(sys.argv) < 2:
         print("Usage: python scripts/sync_wechat.py <path_to_markdown_file>")
@@ -212,7 +237,17 @@ if __name__ == "__main__":
             )
             sys.exit(1)
 
-        final_html = convert_md_to_wechat_html(new_md, style_name)
+        # Try to use existing preview HTML, otherwise regenerate
+        preview_html = load_preview_html(target_md)
+        if preview_html:
+            # Replace local image paths with WeChat URLs in existing HTML
+            for local_path, wechat_url in image_map.items():
+                preview_html = preview_html.replace(local_path, wechat_url)
+            final_html = preview_html
+            print("✅ 使用已生成的预览 HTML")
+        else:
+            final_html = render_markdown_to_wechat_html(new_md, style_name)
+            print("⚠️ 未找到预览 HTML，重新生成")
 
         media_id = push_to_wechat_draft(token, title, digest, final_html, thumb_id)
 
@@ -227,6 +262,10 @@ if __name__ == "__main__":
             "synced_at": datetime.now().isoformat(),
         }
         save_sync_record(record, base_dir)
+
+        # Archive to published directory
+        article_date = os.path.basename(base_dir)  # YYYY-MM-DD
+        archive_to_published(target_md, final_html, record, article_date)
 
     except Exception as e:
         print(f"❌ Error during sync: {str(e)}")

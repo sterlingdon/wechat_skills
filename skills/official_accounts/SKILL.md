@@ -33,8 +33,12 @@ content/
       images/
       article_preview.html
       sync_record.json
-  04-published/       # 已发布
+  04-published/       # 已发布归档
     YYYY-MM-DD/
+      article.md              # 原始 Markdown
+      article_final.html      # 最终发送给微信的 HTML（关键！）
+      images/                 # 本地图片备份
+      sync_record.json        # 同步记录
 
 assets/templates/styles/  # 排版样式
   solemn.css          # 庄重风格（深度分析、严肃话题）
@@ -229,15 +233,88 @@ python scripts/sync_wechat.py "content/03-review/2025-03-25/article.md"
 
 ## 8. 输出交付
 
-同步成功后返回：
-- **media_id**: 草稿 ID
-- **thumb_media_id**: 封面图素材 ID
-- **sync_record.json**: 完整同步记录
+### 8.1 本地物料（content/03-review/YYYY-MM-DD/）
 
-用户需：
-1. 打开微信公众号后台预览
-2. 确认无误后手动点击"群发"
-3. 可选择移动到 `content/04-published/` 归档
+同步完成后，本地目录结构如下：
+
+```
+content/03-review/2026-03-26/
+├── ai-supply-chain-security-2026.md      # 原始 Markdown 源文件
+├── ai-supply-chain-security-2026_preview.html  # 渲染后的 HTML（内联 CSS，本地图片路径）
+├── images/                                # 本地图片文件
+│   ├── cover.jpg                          # 封面图（900x383）
+│   ├── litellm-cover.jpg                  # 正文配图（1080x608）
+│   ├── litellm-stealer.jpg
+│   └── ...
+└── sync_record.json                       # 同步记录
+```
+
+### 8.2 微信草稿箱物料
+
+推送成功后，微信草稿箱中包含：
+
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| **media_id** | 草稿唯一标识 | `9lI6B3macw9zWKMVFKDM1MQFe...` |
+| **thumb_media_id** | 封面图素材 ID | 用于公众号消息列表展示 |
+| **title** | 文章标题 | `AI 供应链告急：从 LiteLLM 后门看...` |
+| **digest** | 摘要 | 显示在封面图下方 |
+| **content** | HTML 正文 | 带内联样式，图片已替换为微信 CDN 链接 |
+
+### 8.3 图片 URL 映射
+
+同步过程中，本地图片路径被替换为微信 CDN 链接：
+
+```
+本地：images/cover.jpg
+  ↓ 上传
+微信：https://mmbiz.qpic.cn/mmbiz_jpg/xxx/0?wx_fmt=jpeg
+```
+
+### 8.4 sync_record.json 结构
+
+```json
+{
+  "media_id": "9lI6B3macw9zWKMVFKDM1MQFe...",
+  "thumb_media_id": "abc123...",
+  "title": "AI 供应链告急：从 LiteLLM 后门看 2026 年新型安全威胁",
+  "digest": "本文梳理 2026 年 3 月发生的重大 AI 安全事件...",
+  "style_name": "wechat-default",
+  "images": {
+    "images/cover.jpg": "https://mmbiz.qpic.cn/mmbiz_jpg/xxx/0?wx_fmt=jpeg",
+    "images/litellm-cover.jpg": "https://mmbiz.qpic.cn/mmbiz_jpg/yyy/0?wx_fmt=jpeg"
+  },
+  "source_file": "content/03-review/2026-03-26/ai-supply-chain-security-2026.md",
+  "synced_at": "2026-03-26T14:30:00"
+}
+```
+
+### 8.5 归档目录（content/04-published/YYYY-MM-DD/）
+
+同步成功后，自动归档至 `04-published` 目录：
+
+```
+content/04-published/2026-03-26/
+├── ai-supply-chain-security-2026.md        # 原始 Markdown
+├── ai-supply-chain-security-2026_final.html  # 最终发送给微信的 HTML ⭐
+├── images/                                  # 本地图片备份
+│   ├── cover.jpg
+│   └── ...
+└── sync_record.json                         # 同步记录
+```
+
+**关键文件：`*_final.html`**
+- 这是最终发送给微信的 HTML 内容
+- 包含内联 CSS 样式
+- 图片 URL 已替换为微信 CDN 链接
+- 如果微信样式有问题，检查此文件确认上传内容是否正确
+
+### 8.6 用户后续操作
+
+1. 打开微信公众号后台 → 草稿箱
+2. 找到对应文章，点击预览
+3. 确认无误后点击「群发」
+4. 可选：移动到 `content/04-published/` 归档
 
 ---
 
