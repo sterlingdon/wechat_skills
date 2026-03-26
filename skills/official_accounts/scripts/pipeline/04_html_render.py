@@ -66,10 +66,20 @@ def render_markdown_to_wechat_html(
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>{css_content}</style>
+        <style>
+        body {{
+            margin: 0;
+            padding: 0;
+        }}
+        .wechat-content {{
+            padding: 20px 16px;
+            box-sizing: border-box;
+        }}
+        {css_content}
+        </style>
     </head>
     <body>
-        <div class="wechat-content" style="max-width: 100%; box-sizing: border-box;">
+        <div class="wechat-content" style="max-width: 100%;">
             {html_body}
         </div>
     </body>

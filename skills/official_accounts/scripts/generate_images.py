@@ -53,10 +53,21 @@ def resize_and_crop(image_path, target_width, target_height):
 
 
 def extract_date_from_path(file_path):
+    """从路径中提取日期 YYYY-MM-DD"""
     match = re.search(r"/(\d{4}-\d{2}-\d{2})/", file_path)
     if match:
         return match.group(1)
     return None
+
+
+def extract_article_name_from_path(file_path):
+    """从路径中提取文章名称（取日期目录后的下一级目录名）"""
+    # 路径格式: .../YYYY-MM-DD/{article-name}/{article-name}.md
+    match = re.search(r"/(\d{4}-\d{2}-\d{2})/([^/]+)/", file_path)
+    if match:
+        return match.group(2)
+    # 兼容旧格式：直接从文件名提取
+    return os.path.basename(file_path).replace(".md", "")
 
 
 def main():
@@ -73,8 +84,12 @@ def main():
         print(f"❌ 文件路径中未找到日期目录 (格式: YYYY-MM-DD): {target_md}")
         sys.exit(1)
 
-    article_name = os.path.basename(target_md).replace(".md", "")
-    review_dir = os.path.join(project_root, "content", "03-review", date_dir)
+    article_name = extract_article_name_from_path(target_md)
+
+    # 新目录结构：03-review/YYYY-MM-DD/{article-name}/
+    review_dir = os.path.join(
+        project_root, "content", "03-review", date_dir, article_name
+    )
     image_dir = os.path.join(review_dir, "images")
     os.makedirs(image_dir, exist_ok=True)
 
@@ -138,6 +153,14 @@ def main():
                     aspect_ratio="16:9",
                 )
                 resize_and_crop(output_path, 1080, 608)
+
+                # 保存正文配图的 prompt
+                prompt_path = os.path.join(
+                    image_dir, f"{article_name}_{idx}_prompt.txt"
+                )
+                with open(prompt_path, "w", encoding="utf-8") as f:
+                    f.write(task["final_prompt"])
+                print(f"📝 已保存正文配图 prompt 至 {prompt_path}")
 
                 img_markdown = f"\n![{task['original_desc']}](./images/{filename})\n"
                 new_md_text = new_md_text.replace(task["placeholder"], img_markdown)

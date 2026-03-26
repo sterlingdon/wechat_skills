@@ -143,14 +143,13 @@ def save_sync_record(record: dict, base_dir: str):
 
 
 def archive_to_published(
-    source_md: str,
-    final_html: str,
-    record: dict,
-    article_date: str
+    source_md: str, final_html: str, record: dict, article_date: str, article_name: str
 ):
-    """Archive published materials to content/04-published/YYYY-MM-DD/"""
+    """
+    Archive published materials to content/04-published/YYYY-MM-DD/{article-name}/
+    """
     published_dir = os.path.join(
-        project_root, "content", "04-published", article_date
+        project_root, "content", "04-published", article_date, article_name
     )
     os.makedirs(published_dir, exist_ok=True)
 
@@ -183,6 +182,7 @@ def archive_to_published(
         target_images = os.path.join(published_dir, "images")
         if not os.path.exists(target_images):
             import shutil
+
             shutil.copytree(source_images, target_images)
             print(f"📦 归档图片: {target_images}")
 
@@ -263,9 +263,9 @@ if __name__ == "__main__":
         }
         save_sync_record(record, base_dir)
 
-        # Archive to published directory
-        article_date = os.path.basename(base_dir)  # YYYY-MM-DD
-        archive_to_published(target_md, final_html, record, article_date)
+        # Extract article name from path (directory name after date)
+        article_name = os.path.basename(base_dir)
+        archive_to_published(target_md, final_html, record, article_date, article_name)
 
     except Exception as e:
         print(f"❌ Error during sync: {str(e)}")
