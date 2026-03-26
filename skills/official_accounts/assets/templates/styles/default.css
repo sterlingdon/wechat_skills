@@ -1,0 +1,95 @@
+/* 基础重置与字体 */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #3f3f3f;
+    font-size: 16px;
+    line-height: 1.75;
+    letter-spacing: 0.5px;
+    margin: 0;
+    padding: 16px;
+    word-break: break-word;
+}
+
+/* 标题样式 */
+h1, h2, h3, h4, h5, h6 {
+    color: #2c3e50;
+    margin-top: 1.5em;
+    margin-bottom: 0.8em;
+    font-weight: bold;
+}
+
+h2 {
+    font-size: 20px;
+    border-bottom: 2px solid #e2e2e2;
+    padding-bottom: 8px;
+}
+
+h3 {
+    font-size: 18px;
+}
+
+/* 段落与列表 */
+p {
+    margin: 0 0 1.2em 0;
+}
+
+ul, ol {
+    padding-left: 20px;
+    margin-bottom: 1.2em;
+    color: #555;
+}
+
+li {
+    margin-bottom: 0.5em;
+}
+
+/* 引用块 */
+blockquote {
+    border-left: 4px solid #42b983;
+    background-color: #f8f8f8;
+    padding: 10px 15px;
+    margin: 0 0 1.2em 0;
+    color: #666;
+    border-radius: 4px;
+}
+
+/* 图片处理（微信对图片的规范要求宽度为 100%） */
+img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 1.2em auto;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+/* 粗体与高亮文本 */
+strong {
+    color: #e74c3c;
+    font-weight: bold;
+}
+
+/* 代码块 */
+pre {
+    background-color: #2d2d2d;
+    color: #ccc;
+    padding: 15px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 14px;
+}
+
+code {
+    background-color: #f9f2f4;
+    color: #c7254e;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre code {
+    background-color: transparent;
+    color: inherit;
+    padding: 0;
+}
