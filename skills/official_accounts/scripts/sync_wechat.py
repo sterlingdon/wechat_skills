@@ -11,7 +11,9 @@ load_dotenv()
 APP_ID = os.environ.get("WECHAT_APP_ID")
 APP_SECRET = os.environ.get("WECHAT_APP_SECRET")
 
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+skill_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+workspace_root = os.path.dirname(os.path.dirname(skill_root))
+content_root = os.path.join(workspace_root, "content_hub")
 
 
 def extract_title(md_content: str) -> str:
@@ -146,10 +148,10 @@ def archive_to_published(
     source_md: str, final_html: str, record: dict, article_date: str, article_name: str
 ):
     """
-    Archive published materials to content/04-published/YYYY-MM-DD/{article-name}/
+    Archive published materials to content_hub/04-published/YYYY-MM-DD/{article-name}/
     """
     published_dir = os.path.join(
-        project_root, "content", "04-published", article_date, article_name
+        content_root, "04-published", article_date, article_name
     )
     os.makedirs(published_dir, exist_ok=True)
 
@@ -193,7 +195,7 @@ if __name__ == "__main__":
     import sys
     import importlib
 
-    sys.path.insert(0, project_root)
+    sys.path.insert(0, skill_root)
 
     analyze_article = importlib.import_module(
         "scripts.pipeline.01_article_analyze"
@@ -264,6 +266,10 @@ if __name__ == "__main__":
         save_sync_record(record, base_dir)
 
         # Extract article name from path (directory name after date)
+        date_match = re.search(r"/(\d{4}-\d{2}-\d{2})/", os.path.abspath(target_md))
+        if not date_match:
+            raise Exception(f"未能从路径中提取文章日期: {target_md}")
+        article_date = date_match.group(1)
         article_name = os.path.basename(base_dir)
         archive_to_published(target_md, final_html, record, article_date, article_name)
 

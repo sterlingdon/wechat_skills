@@ -89,32 +89,69 @@ def _qwen_wanx_generate(
     prompt, output_image_path, model=None, api_base_url=None, api_key=None, size=None
 ):
     """wanx 系列模型的图像生成（使用 ImageSynthesis API）"""
-    from dashscope import ImageSynthesis
     import dashscope
+    import json
+    import requests
 
     if api_key:
         dashscope.api_key = api_key
     if api_base_url:
         dashscope.base_url = api_base_url
 
+    normalized_model = (model or "wan2.6-t2i").strip().lower()
+
     try:
-        response = ImageSynthesis.call(
-            model=model or "wanx2.1-t2i-turbo",
-            prompt=prompt,
-            n=1,
-            size=size or "1024*1024",
-        )
+        if normalized_model.startswith("wan2."):
+            from dashscope.aigc.image_generation import ImageGeneration
+            from dashscope.api_entities.dashscope_response import Message
 
-        if response.status_code == 200 and response.output and response.output.results:
-            image_url = response.output.results[0].url
-            import requests
+            message = Message(role="user", content=[{"text": prompt}])
+            response = ImageGeneration.call(
+                model=model or "wan2.6-t2i",
+                api_key=api_key,
+                messages=[message],
+                negative_prompt="",
+                prompt_extend=True,
+                watermark=False,
+                n=1,
+                size=size or "1024*1024",
+            )
 
-            img_response = requests.get(image_url)
-            if img_response.status_code == 200:
-                with open(output_image_path, "wb") as f:
-                    f.write(img_response.content)
-                print(f"[✓] Image saved: {output_image_path}")
-                return True
+            if response.status_code == 200:
+                resp_dict = json.loads(str(response))
+                content = (
+                    resp_dict.get("output", {})
+                    .get("choices", [{}])[0]
+                    .get("message", {})
+                    .get("content", [])
+                )
+                for item in content:
+                    image_url = item.get("image")
+                    if image_url:
+                        img_response = requests.get(image_url)
+                        if img_response.status_code == 200:
+                            with open(output_image_path, "wb") as f:
+                                f.write(img_response.content)
+                            print(f"[✓] Image saved: {output_image_path}")
+                            return True
+        else:
+            from dashscope import ImageSynthesis
+
+            response = ImageSynthesis.call(
+                model=model or "wan2.6-t2i",
+                prompt=prompt,
+                n=1,
+                size=size or "1024*1024",
+            )
+
+            if response.status_code == 200 and response.output and response.output.results:
+                image_url = response.output.results[0].url
+                img_response = requests.get(image_url)
+                if img_response.status_code == 200:
+                    with open(output_image_path, "wb") as f:
+                        f.write(img_response.content)
+                    print(f"[✓] Image saved: {output_image_path}")
+                    return True
         print(f"Error from Qwen API: {response.message}", file=sys.stderr)
         return False
     except Exception as e:
@@ -234,7 +271,8 @@ def _qwen_generate_image(
         return False
 
     dashscope.api_key = api_key
-    is_wanx_model = model and (model.startswith("wanx") or model.startswith("wan-"))
+    normalized_model = (model or "").strip().lower()
+    is_wanx_model = normalized_model.startswith("wan")
 
     if is_wanx_model:
         return _qwen_wanx_generate(
@@ -285,7 +323,7 @@ def generate_image(
         model = (
             "gemini-3.1-flash-image-preview"
             if provider == "gemini"
-            else "wanx2.1-t2i-turbo"
+            else "qwen-image-2.0-pro"
         )
     api_base_url = provider_config.get("api_base_url", "")
 

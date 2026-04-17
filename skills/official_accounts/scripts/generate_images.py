@@ -9,8 +9,10 @@ except ImportError:
     print("Error: Pillow is not installed. Run: pip install Pillow")
     sys.exit(1)
 
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(project_root)
+skill_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+workspace_root = os.path.dirname(os.path.dirname(skill_root))
+content_root = os.path.join(workspace_root, "content_hub")
+sys.path.append(skill_root)
 
 import importlib
 
@@ -88,7 +90,7 @@ def main():
 
     # 新目录结构：03-review/YYYY-MM-DD/{article-name}/
     review_dir = os.path.join(
-        project_root, "content", "03-review", date_dir, article_name
+        content_root, "03-review", date_dir, article_name
     )
     image_dir = os.path.join(review_dir, "images")
     os.makedirs(image_dir, exist_ok=True)

@@ -3,8 +3,8 @@ import sys
 import argparse
 import importlib
 
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(project_root)
+skill_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(skill_root)
 
 render_markdown_to_wechat_html = importlib.import_module(
     "scripts.pipeline.04_html_render"

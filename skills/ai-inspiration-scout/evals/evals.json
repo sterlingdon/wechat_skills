@@ -1,0 +1,23 @@
+{
+  "skill_name": "ai-inspiration-scout",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我今天没灵感，去全网搜最近 1-2 天 AI 圈最值得写的内容，重点看 X、新闻和 GitHub Trending，给我多几个题。",
+      "expected_output": "直接写入正确日期目录，生成 daily-overview.md 和多个 topic 目录，每个目录至少含 idea.md 与 sources.md，并覆盖新闻、X、GitHub 三类来源。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "我想写一篇偏观点型的 AI 公众号，看看这两天头部博主都在吵什么、推荐什么，有没有适合拿来展开的。",
+      "expected_output": "生成多个以观点冲突、反差或争议为主的候选题目录，idea.md 里有明确可写角度、争议点和标题候选，而不是只做新闻摘抄。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "帮我找今天适合写成中文 AI 自媒体文章的工具类/产品类选题，最好能直接沉淀到 official_accounts 的 ideas 目录里。",
+      "expected_output": "生成偏工具/产品发布方向的候选题目录，能直接落到 official_accounts 的 01-ideas 路径中，并包含面向中文自媒体的写作提示。",
+      "files": []
+    }
+  ]
+}

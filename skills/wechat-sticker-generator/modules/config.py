@@ -17,7 +17,7 @@ DEFAULT_CONFIG = {
         "qwen": {
             "api_key_env": "DASHSCOPE_API_KEY",
             "alt_env_keys": ["QWEN_API_KEY"],
-            "model": "qwen-vl-max",
+            "model": "qwen-image-2.0-pro",
             "text_model": "qwen-max",
             "description": "阿里千问 - 国内访问稳定"
         }

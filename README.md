@@ -35,6 +35,7 @@ To use these skills in your OpenCode environment:
 
 | Skill | Description |
 |-------|-------------|
+| **[ai-inspiration-scout](./skills/ai-inspiration-scout)** | Search the last 1-2 days of AI news, X discussions, top voices, and GitHub trending tools, then save multiple writing-ready topic ideas into the repo-level `content_hub/01-ideas/`. |
 | **[wechat-article-crawler](./skills/wechat-article-crawler)** | Crawl WeChat official account articles and export full content (Markdown/HTML) plus local assets (images, videos, audio). |
 | **[wechat-sticker-generator](./skills/wechat-sticker-generator)** | Generate WeChat-compliant sticker sets (GIF/PNG) with consistent characters and automated background removal. |
 
@@ -57,6 +58,14 @@ Create professional-grade sticker packs for WeChat from text descriptions or per
   - Supports 12+ art styles (Anime, 3D Clay, Pixel Art, etc.).
   - Automatic background removal and sprite sheet slicing.
   - Generates a full `wechat_export` folder ready for the WeChat platform.
+
+### 3. AI Inspiration Scout
+Find daily AI writing angles for creators who need fresh topics quickly.
+- **Trigger**: "I need AI topic ideas", "Search the latest AI news", "What is X talking about in AI?", "Any AI tools on GitHub trending worth covering?"
+- **Features**:
+  - Looks across recent AI news, X platform discussion, top industry voices, and GitHub trending tools.
+  - Clusters raw links into 5-10 writing-ready topic candidates.
+  - Saves `daily-overview.md`, `idea.md`, and `sources.md` directly into the repo-level `content_hub`.
 
 ---
 
