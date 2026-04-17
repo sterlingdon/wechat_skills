@@ -1,6 +1,32 @@
 ---
 name: ai-inspiration-scout
-description: 为 AI 行业自媒体和公众号创作者全网搜索最近 1-2 天的 AI 资讯、X 平台讨论、头部 IP 动向、GitHub Trending 工具与产品发布，并沉淀为可直接写作的多选题灵感目录。用户提到“没灵感了”“找最近 AI 资讯”“今天写什么”“X 上 AI 圈在聊什么”“看看 GitHub trending 有没有 AI 工具”“帮我找几个 AI 选题”时一定要使用这个 skill。
+description: 为 AI 行业自媒体和公众号创作者全网搜索最近 1-2 天的 AI 赆讯、X 平台讨论、头部 IP 动向、GitHub Trending 工具与产品发布，并沉淀为可直接写作的多选题灵感目录。
+version: 1.0.0
+author: sterlingdon
+license: MIT
+tags:
+  - research
+  - ai-news
+  - content-creation
+  - wechat
+  - inspiration
+keywords:
+  - AI灵感
+  - 选题挖掘
+  - GitHub Trending
+  - 公众号运营
+  - X平台热点
+triggers:
+  - "没灵感了"
+  - "找最近AI资讯"
+  - "今天写什么"
+  - "X上AI圈在聊什么"
+  - "GitHub trending AI工具"
+  - "帮我找几个AI选题"
+metadata:
+  openclaw:
+    emoji: "💡"
+    homepage: https://github.com/sterlingdon/wechat_skills
 ---
 
 # AI Inspiration Scout

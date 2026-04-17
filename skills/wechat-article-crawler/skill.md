@@ -1,6 +1,40 @@
 ---
 name: wechat-article-crawler
-description: Crawl WeChat official account articles and export full content (Markdown/HTML) plus local assets (images, videos, audio) into per-article directories. Use when the user wants to archive or process WeChat public account articles, scrape articles by keyword or URL, or needs full-fidelity content (text + media) from mp.weixin.qq.com.
+description: Crawl WeChat official account articles and export full content (Markdown/HTML) plus local assets (images, videos, audio) into per-article directories.
+version: 1.0.0
+author: sterlingdon
+license: MIT
+tags:
+  - wechat
+  - crawler
+  - scraper
+  - article-archive
+  - media-download
+keywords:
+  - 微信文章
+  - 爬虫
+  - 文章归档
+  - mp.weixin.qq.com
+  - 图片下载
+triggers:
+  - "爬取微信公众号"
+  - "归档公众号文章"
+  - "抓取文章"
+  - "保存微信文章"
+metadata:
+  openclaw:
+    requires:
+      bins:
+        - npm
+      anyBins:
+        - node
+        - nodejs
+    emoji: "🕷️"
+    homepage: https://github.com/sterlingdon/wechat_skills
+    install:
+      - kind: npm
+        package: playwright
+        bins: [playwright]
 ---
 
 # WeChat Article Crawler

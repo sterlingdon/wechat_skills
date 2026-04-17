@@ -1,6 +1,47 @@
 ---
 name: wechat-official-account-manager
-description: 全自动化的微信公众号文章运营套件。支持从灵感扩写、AI自主风格分析、封面及内页配图生成（对接 Gemini SDK），到内联 CSS 渲染及微信草稿箱自动同步。当用户提到"写推文"、"发公众号"、"排版同步"等关键词时触发。
+description: 全自动化的微信公众号文章运营套件。支持从灵感扩写、AI自主风格分析、封面及内页配图生成（对接 Gemini SDK），到内联 CSS 渲染及微信草稿箱自动同步。
+version: 1.0.0
+author: sterlingdon
+license: MIT
+tags:
+  - wechat
+  - content-creation
+  - image-generation
+  - automation
+  - publishing
+keywords:
+  - 公众号
+  - 微信
+  - 文章排版
+  - 配图生成
+  - 草稿同步
+  - Gemini
+triggers:
+  - "写推文"
+  - "发公众号"
+  - "排版同步"
+  - "生成配图"
+metadata:
+  openclaw:
+    requires:
+      env:
+        - WECHAT_APP_ID
+        - WECHAT_APP_SECRET
+        - GEMINI_API_KEY
+        - AI_API_KEY
+        - DASHSCOPE_API_KEY
+      bins:
+        - python3
+      anyBins:
+        - pip
+        - pip3
+    primaryEnv: WECHAT_APP_ID
+    emoji: "📝"
+    homepage: https://github.com/sterlingdon/wechat_skills
+    install:
+      - kind: pip
+        package: requests markdown premailer python-dotenv google-genai dashscope pillow
 ---
 
 # 📝 WeChat Official Account Manager (微信公众号全自动运营管家)

@@ -1,6 +1,44 @@
 ---
 name: wechat-sticker-generator
-description: 一键生成符合微信规范的动态(GIF)及静态(PNG)系列表情包套件。支持多种画风、场景、角色类型，全自动切割合成标准产物。当用户提到"表情包"、"动图"、"贴纸"、"sticker"、"表情"等关键词时触发。
+description: 一键生成符合微信规范的动态(GIF)及静态(PNG)系列表情包套件。支持12种画风、10大场景主题、真人照片转Q版，全自动切割合成标准产物。
+version: 1.0.0
+author: sterlingdon
+license: MIT
+tags:
+  - wechat
+  - sticker
+  - image-generation
+  - gif
+  - emoji
+  - animation
+keywords:
+  - 表情包
+  - 动图
+  - GIF生成
+  - 微信贴纸
+  - Q版角色
+  - 真人转Q版
+triggers:
+  - "表情包"
+  - "动图"
+  - "贴纸"
+  - "sticker"
+  - "做表情"
+metadata:
+  openclaw:
+    requires:
+      env:
+        - GEMINI_API_KEY
+        - DASHSCOPE_API_KEY
+      anyBins:
+        - python3
+        - python
+    primaryEnv: GEMINI_API_KEY
+    emoji: "🎭"
+    homepage: https://github.com/sterlingdon/wechat_skills
+    install:
+      - kind: pip
+        package: rembg onnxruntime pillow requests google-genai dashscope
 ---
 
 # 📄 WeChat Sticker Generator (微信表情包套件生成器)
@@ -449,43 +487,140 @@ Gemini 会自动进行以下处理：
 
 ## 7. 智能体执行流程 (Execution Workflow)
 
+### 【前置检查】模型出图能力检测（优先执行）
+
+在启动流水线前，先检测 API Key 配置状态：
+
+```bash
+python3 sticker_utils.py config
+```
+
+**情况 A：已配置 API Key**
+- 显示 ✅ → 直接继续后续流程
+
+**情况 B：未配置 API Key**
+
+Agent 向用户展示两条路径选择：
+
+| 路径 | 说明 | 后续流程 |
+|-----|------|---------|
+| **路径A：配置 API** | 获取并配置 API Key，后续全自动 | 推荐 |
+| **路径B：手动出图** | 不配置，去外部平台生成图片 | 需用户手动介入 |
+
+---
+
+#### 路径A - 配置 API Key（推荐）
+
+**获取 API Key：**
+- Gemini：https://aistudio.google.com/app/apikey
+- 千问：https://dashscope.console.aliyun.com/
+
+**配置方式：**
+```bash
+# Gemini
+export GEMINI_API_KEY="你的API_Key"
+
+# 千问
+export DASHSCOPE_API_KEY="你的API_Key"
+```
+
+配置完成后重新检测，继续后续流程。
+
+---
+
+#### 路径B - 手动出图流程
+
+> **⚠️ 关键：如果用户提供了定妆图，输出 prompt 时必须告知用户带上定妆图去外部平台！**
+
+---
+
+**前置处理：定妆图处理**
+
+| 用户情况 | Agent 处理 |
+|---------|-----------|
+| **有定妆图（路径）** | `cp <用户路径> $DIR_PATH/base_reference.png` |
+| **有定妆图（对话上传）** | Agent 识别图片，移动到 `$DIR_PATH/base_reference.png` |
+| **无定妆图** | 纯文字描述生成 prompt，不涉及定妆图 |
+
+---
+
+**步骤 1：生成并输出 prompt**
+```bash
+python3 sticker_utils.py build_prompts $DIR_PATH
+```
+- 每个表情生成独立的 `prompt.txt`
+- 告知用户文件路径：`$DIR_PATH/anim_XX/prompt.txt`
+
+**步骤 2：引导用户去外部平台生图**
+
+| 定妆图情况 | 引导内容 |
+|----------|---------|
+| **有定妆图** | 告知用户：带上 `$DIR_PATH/base_reference.png` 去外部平台，作为参考图上传 |
+| **无定妆图** | 只需要复制 prompt.txt 内容即可 |
+
+- 详细操作指南见 `reference/external_platform_guide.md`
+
+**步骤 3：接收用户返回的图片** ⭐
+- 用户在对话中上传/粘贴图片
+- Agent 识别图片并移动到正确位置：
+  ```bash
+  mv <用户上传图片> $DIR_PATH/anim_XX/original_grid.png
+  ```
+- **批量场景**：逐张上传 → 逐张处理 → 实时反馈进度
+
+**步骤 4：执行切割处理**
+```bash
+python3 sticker_utils.py process $DIR_PATH
+```
+
+**步骤 5：告知导出位置**
+- 导出目录结构及查看方式见 `reference/output_guide.md`
+
+---
+
 ### 【第零步】用户需求收集（必须询问）
 
 **⚠️ 在开始任何操作前，必须向用户确认以下信息：**
 
 | 需要询问的信息 | 是否必填 | 说明 |
 |---------------|---------|------|
-| **参考图** | 可选 | 用户提供的角色外观参考图（任意风格均可） |
+| **定妆图** | 可选 | 白底、正面、无动作的标准基准图（用于锁定角色一致性）。可以是文件路径，也可以在对话中直接上传图片 |
+| **角色外观描述** | 推荐 | 如果没有定妆图，需要文字描述角色长相（只写外观，不写动作） |
 | **角色名称** | 可选 | 角色的名字，用于表情包命名和文案生成 |
 | **风格** | 推荐 | 从 12 种预设风格中选择（见 §3.1 风格预设） |
 | **场景主题** | 推荐 | 从 10 大场景主题中选择（见 §3.2 场景主题） |
 | **模式** | 推荐 | 选择生成 **静态图集** 还是 **动态GIF** |
 | **宫格类型** | 推荐 | 选择 **9宫格**（0.9秒/9帧，速度快）或 **16宫格**（1.6秒/16帧，动作细腻） |
-| **表情数量** | 推荐 | 默认 **24个表情**（微信专辑标准规范），也可自定义 |
+| **表情数量** | 推荐 | 默认 **9个表情**（单套），微信专辑标准需 **24个** |
 
 **询问话术示例：**
 > "在开始生成表情包之前，请告诉我以下信息：
-> 1. **参考图**：有角色参考图吗？（如有请提供，没有也可以纯文字描述）
-> 2. **角色名称**：角色叫什么名字？（不提供则自动生成）
-> 3. **风格**：选择哪种画风？（水墨风、像素风、水彩风、二次元可爱风等，共12种可选）
-> 4. **场景主题**：想要什么场景？（可自由发挥，如职场打工、恋爱、游戏电竞等；也可参考预设的10种场景）
-> 5. **模式**：需要**静态表情**（默认）还是**动态GIF**？
-> 6. **宫格类型**：需要9宫格（9帧/0.9秒，生成快）还是16宫格（16帧/1.6秒，动作更细腻）？
-> 7. **数量**：默认生成符合微信专辑规范的 **24个** 表情，需要调整吗？"
+> 1. **定妆图**：有现成的角色定妆图吗？（白底、正面、无动作的标准图。如有请提供路径或直接上传图片）
+> 2. **角色外观**：如果没有定妆图，请描述角色长相（只写外观，如"胖橘猫，圆脸大眼，戴小领带"）
+> 3. **角色名称**：角色叫什么名字？（不提供则自动生成）
+> 4. **风格**：选择哪种画风？（水墨风、像素风、水彩风、二次元可爱风等，共12种可选）
+> 5. **场景主题**：想要什么场景？（可自由发挥，如职场打工、恋爱、游戏电竞等）
+> 6. **模式**：需要**静态表情**（默认）还是**动态GIF**？
+> 7. **宫格类型**：需要9宫格（9帧/0.9秒，生成快）还是16宫格（16帧/1.6秒，动作更细腻）？
+> 8. **数量**：默认生成 **9个** 表情，微信专辑标准需要 **24个**，需要调整吗？"
+
+**定妆图概念说明：**
+- **定妆图** = 白底纯背景、正面姿势、无夸张动作的角色基准图
+- **作用**：锁定角色外观一致性，每次生图时让 AI"看着"这张图来画
+- **来源方式**：
+  - 用户直接提供（对话上传图片 / 文件路径）
+  - 用户提供参考图 → Agent 用 AI 生成标准定妆图
+  - 用户纯文字描述 → Agent 用 AI 生成定妆图
 
 **处理逻辑：**
-- **用户提供了参考图** → 用于 AI 生成定妆图时参考角色外观
-- **用户未提供参考图** → 使用纯文字描述文生图，角色外观由 AI 自由创作
-- **用户提供了角色名称** → 用于 `character_name` 字段
-- **用户未提供角色名称** → 根据场景主题自动生成合适的角色名称
+- **用户提供定妆图** → Agent 移动图片到 `$DIR_PATH/base_reference.png`
+- **用户提供参考图** → Agent 用 AI 生成标准化定妆图（白底、正面、无动作）
+- **用户无图，仅文字描述** → Agent 用 AI 生成定妆图
 - **用户未指定风格** → 默认使用 `2D_KAWAII`（日系二次元可爱风）
-- **用户自定义场景** → 自由发挥，AI 会根据场景描述生成配文和动作
 - **用户未指定场景** → 默认使用 `COMPREHENSIVE`（综合场景）
 - **用户未指定模式** → 默认使用 **静态模式 (static)**
 - **用户未指定宫格类型** → 默认使用 **9宫格** (`grid_size: 9`)
-- **用户未指定数量** → 默认生成 **24 个表情**。
-  - 静态模式：生成 24 张静态图（例如 3 个 9宫格）
-  - 动态模式：生成 24 个 GIF（即 24 个宫格图）
+- **用户未指定数量** → 默认生成 **9 个表情**（单套）；微信专辑标准需要 **24 个**
 
 ---
 
@@ -499,37 +634,35 @@ DIR_PATH=$(python3 sticker_utils.py create_dir --provider gemini)
 
 ### 【第二步】角色定妆与入驻（统一生成标准基准图）
 
-**⚠️ 核心定律：所有表情包的生成，必须依赖一张绝对中立、没有夸张动作的”定妆图” (`base_reference.png`)。决不允许把夸张动作写进定妆步骤！**
+**⚠️ 核心定律：所有表情包的生成，必须依赖一张白底、正面、无动作的"定妆图" (`base_reference.png`。**
 
-**⚠️ 重要：定妆图必须由 AI 生成，不能直接复制用户的原图！用户提供的参考图仅供 AI 参考角色外观，最终定妆图需要 AI 统一生成标准格式（纯白背景、正面姿势、无夸张动作）。**
+> 注：定妆图处理已在【第零步】和【前置检查】中说明。本步骤仅适用于 **有 API Key** 的情况。
 
-用户的原始照片及生成的定妆图，**必须都存放于 `$DIR_PATH` 目录下**。
+---
 
-**情况 A：无图生成（纯文字描述）**
+**路径A（有 API Key）- AI 生成定妆图：**
+
+| 用户情况 | Agent 处理 |
+|---------|-----------|
+| **用户提供定妆图** | 直接复制到 `$DIR_PATH/base_reference.png` |
+| **用户提供参考图** | 用 AI 生成标准化定妆图（白底、正面、无动作） |
+| **用户无图，纯文字** | 用 AI 生成定妆图 |
+
+**AI 生成定妆图命令：**
 ```bash
-python3 sticker_utils.py draw_character “角色的外观描述...” “2D_KAWAII” “$DIR_PATH/base_reference.png”
+# 无图生成
+python3 sticker_utils.py draw_character “角色外观描述” “STYLE” “$DIR_PATH/base_reference.png”
+
+# 有参考图生成
+python3 sticker_utils.py draw_with_ref “$DIR_PATH/user_reference.png” “角色外观描述” “STYLE” “$DIR_PATH/base_reference.png”
+
+# 真人照片转Q版
+python3 sticker_utils.py transform_photo “$DIR_PATH/user_photo.jpg” “STYLE” “$DIR_PATH/base_reference.png”
 ```
 
-**情况 B：有参考图（卡通/插画角色）**
-用户提供了卡通角色参考图，需要根据参考图生成标准化定妆图：
-```bash
-# 先复制参考图到工作目录
-cp /path/to/user/reference.png $DIR_PATH/user_reference.png
-# 根据参考图描述生成定妆图（不要复制原图！）
-python3 sticker_utils.py draw_character “基于参考图的角色外观描述，保持相同风格和特征” “2D_KAWAII” “$DIR_PATH/base_reference.png”
-```
-
-**情况 C：真人照片转Q版**
-```bash
-cp /path/to/user/photo.jpg $DIR_PATH/user_original_photo.jpg
-python3 sticker_utils.py transform_photo “$DIR_PATH/user_original_photo.jpg” “MEME_STYLE” “$DIR_PATH/base_reference.png” “保持角色外观特征不变，纯白背景正面半身像。绝对不要有任何夸张动作。”
-```
-
-**情况 D：已有完美的白底标准定妆图（极少见）**
-只有在用户提供的图片已经是完美的白底、正面、无动作的标准定妆图时，才可直接复制：
-```bash
-cp /path/to/perfect/reference.png $DIR_PATH/base_reference.png
-```
+**路径B（无 API Key）- 手动流程：**
+- 定妆图处理已在【前置检查】路径B中说明
+- 此步骤跳过，直接进入【第三步】
 
 ---
 
@@ -623,18 +756,12 @@ python3 sticker_utils.py wechat_meta $DIR_PATH
 
 ---
 
-### 【例外情况：无 API Key 时的浏览器人工干预路线】
+### 【例外情况：中途失败时的兜底处理】
 
-如果 Agent 发现系统中**没有配置 API Key**，或者在第四步调用大模型生成图片时**报错中断**，或用户明确表示想采用网页生图，**应当利用浏览器自动化工具（browser_subagent）接管操作**：
-
-1. **调用浏览器工具**：Agent 自动启动 `browser_subagent`，并给它下达任务：`前往 https://gemini.google.com，在聊天输入框内输入以下生成的提示词并发送。`
-2. **免动手全自动输入**：Agent 将生成的 `prompt.txt` 内容传给浏览器实体，子程序会自动定位到输入框、粘贴提示词并按下回车，完全无需用户动手复制！
-3. **交付等待**：网页开始生图后，Agent 提醒用户：“我已经打开了浏览器并帮您自动输入了提示词，目前页面正在生成。生成完毕后，请将最满意的宫格图片保存，并将其文件发给我（或告诉我路径），我会接管切割流程。”
-4. **接力处理**：当用户给出/上传生成的图片后，Agent 将其原样拷贝到 `$DIR_PATH/anim_01/original_grid.png`。
-5. **恢复流水线**：直接跳至第五步，运行 `python3 sticker_utils.py process $DIR_PATH` 进行全自动切片和拼装。
+> 注：若在第四步批量生图时 API 调用失败，可参考上述「前置检查 - 路径B」进行人工干预：用户手动出图 → 返回图片 → Agent 接管切割流程。
 
 **附加彩蛋（直接传图切片）**：
-如果用户某天直接丢给你一张早已画好的宫格网格图（9宫格或16宫格），让你“把它做成表情包”。你不需要走 1~4 步生图，直接新建一个沙盒文件夹并把图放进 `anim_01/original_grid.png`，然后直接跑 `process` 命令即可！
+如果用户直接提供一张已画好的宫格网格图（9宫格或16宫格），可跳过生图步骤：新建沙盒文件夹 → 放入 `anim_01/original_grid.png` → 运行 `process` 命令即可！
 
 ---
 
